@@ -1,0 +1,59 @@
+# Bakım işleri — ASIL zamanlayıcı.
+#
+# NEDEN VERCEL CRON DEĞİL: Vercel'in ücretsiz (Hobby) planında cron GÜNDE
+# YALNIZCA BİR KEZ çalışabilir; daha sık bir ifade dağıtımı BAŞARISIZ EDER.
+# Bu yüzden `vercel.json` içindeki cron günlük bir emniyet ağıdır ve asıl
+# tetikleyici burasıdır. Vercel Pro'ya geçilirse `vercel.json` içindeki plan
+# 15 dakikaya çekilebilir ve bu iş seyrekleştirilebilir.
+#
+# NEDEN SAATTE BİR: GitHub Actions özel depolarda ayda 2000 ücretsiz dakika
+# verir ve her koşu en az 1 dakika sayılır. Saatte bir = ayda ~720 dakika:
+# ücretsiz sınırın rahat içinde kalır ve "0 TL" hedefi korunur. Yarım saatte
+# bir (~1440 dakika) sınırın çok yakınına gelirdi.
+#
+# ÇİFT ÇALIŞTIRMA SORUN DEĞİLDİR: uç PostgreSQL advisory lock ile korunur,
+# ikinci tetikleyici `skipped: true` alır ve hiçbir şey iki kez yapılmaz.
+#
+# ELLE ÇALIŞTIRMA: GitHub'da Actions sekmesi → "Bakım işleri" → "Run workflow".
+# Terminal gerekmez.
+name: Bakım işleri
+
+on:
+  schedule:
+    - cron: '10 * * * *'
+  workflow_dispatch:
+
+# Bir koşu sürerken ikincisi başlamasın.
+concurrency:
+  group: meydan-maintenance
+  cancel-in-progress: false
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Sırlar tanımlı mı
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ] || [ -z "$APP_URL" ]; then
+            echo "::error::CRON_SECRET veya APP_URL deposu sırlarında tanımlı değil."
+            echo "GitHub → Settings → Secrets and variables → Actions bölümünden ekleyin."
+            exit 1
+          fi
+
+      - name: Bakım ucunu tetikle
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          response=$(curl --silent --show-error --fail-with-body \
+            --max-time 90 \
+            --write-out '\n%{http_code}' \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --request POST "${APP_URL%/}/api/cron/jobs")
+          echo "$response"
+          status=$(echo "$response" | tail -n1)
+          test "$status" = "200"
