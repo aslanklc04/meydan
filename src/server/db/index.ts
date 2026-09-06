@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { serverEnv } from '@/config/env';
+import { normalizeDatabaseUrl } from './url';
 import * as schema from './schema';
 
 /**
@@ -31,9 +32,21 @@ declare global {
  */
 const POOL_MAX = process.env.NODE_ENV === 'production' ? 3 : 5;
 
+/**
+ * Sağlayıcı panelinden kopyalanan adres, sürücünün tanımadığı parametreler
+ * içerebilir ve bu bağlantıyı tamamen engeller (bkz. ./url.ts).
+ */
+const { url: DB_URL, dropped } = normalizeDatabaseUrl(serverEnv.DATABASE_URL);
+if (dropped.length > 0) {
+  // Yalnızca ADLAR yazılır; adresin kendisi ve parola asla günlüğe girmez.
+  console.warn(
+    `[veritabanı] Desteklenmeyen bağlantı parametreleri yok sayıldı: ${dropped.join(', ')}`,
+  );
+}
+
 const connection =
   globalThis.__meydanSql ??
-  postgres(serverEnv.DATABASE_URL, {
+  postgres(DB_URL, {
     max: POOL_MAX,
     idle_timeout: 20,
     /** Soğuk başlangıçta ağ yavaşsa istek asılı kalmasın. */
