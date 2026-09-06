@@ -34,6 +34,31 @@ testleri tabloları `TRUNCATE` eder.
 **Bu listenin kaynağı `src/config/env.ts`'tir.** Ad tahmin edilmez; değişken
 eklenirse önce şemaya, sonra buraya yazılır.
 
+### 2.2 `DATABASE_URL` — panelden kopyalanan adres
+
+Sağlayıcı panelinden gelen adres **aynen** yapıştırılır; kırpılması gerekmez.
+Neon gibi sağlayıcılar `libpq` biçiminde parametre ekler:
+
+```
+postgresql://…/neondb?sslmode=require&channel_binding=require
+```
+
+`postgres.js` tanımadığı parametreyi sunucuya *başlangıç parametresi* olarak
+yollar; PostgreSQL `channel_binding`'i tanımadığı için bağlantıyı reddeder ve
+**uygulama hiç açılmaz**. Bu yüzden adres, sınırda `src/server/db/url.ts`
+tarafından temizlenir: sürücünün anladığı parametreler (`sslmode` dâhil)
+korunur, tanınmayanlar düşürülür ve adları günlüğe yazılır.
+
+İzin listesi bilinçlidir: yarın başka bir sağlayıcı bilmediğimiz bir parametre
+eklerse en kötü sonuç "yok sayıldı" olur, "site açılmadı" değil.
+
+**Havuzlanmış (pooled) değil, doğrudan adres kullanılır.** Kapalı beta
+ölçeğinde örnek başına 3 bağlantı yeterlidir ve doğrudan bağlantı, migration
+sırasındaki `pg_advisory_lock`'un doğru çalışmasını garanti eder — advisory
+lock oturuma bağlıdır ve pgbouncer'ın transaction modunda oturum sabit
+kalmaz. Trafik büyürse `DATABASE_URL` havuzlanmış adresle değiştirilir;
+`prepare: false` zaten ayarlıdır.
+
 `RATE_LIMIT_MULTIPLIER` **üretimde ayarlanmaz** — yalnızca test ortamı içindir.
 
 Sır üretimi: `openssl rand -base64 48`
