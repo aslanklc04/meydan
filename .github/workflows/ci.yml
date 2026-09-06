@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Sırsız ortamda env doğrulaması atlanır; gerçek sırlar CI'ya girmez.
+  SKIP_ENV_VALIDATION: '1'
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  quality:
+    name: Lint · Typecheck · Test · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: meydan
+          POSTGRES_PASSWORD: meydan
+          POSTGRES_DB: meydan_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U meydan"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Bağımlılıkları kur
+        run: npm ci
+
+      - name: Format kontrolü
+        run: npm run format:check
+
+      - name: Lint (katman sınırları dâhil)
+        run: npm run lint
+
+      - name: Tip kontrolü
+        run: npm run typecheck
+
+      - name: Şemayı test veritabanına uygula
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://meydan:meydan@localhost:5432/meydan_test
+
+      - name: Birim ve entegrasyon testleri
+        run: npm run test
+        env:
+          DATABASE_URL: postgresql://meydan:meydan@localhost:5432/meydan_test
+          TEST_DATABASE_URL: postgresql://meydan:meydan@localhost:5432/meydan_test
+
+      - name: Build
+        run: npm run build
+
+  security:
+    name: Sır ve bağımlılık taraması
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sır taraması (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Bağımlılık denetimi
+        run: npm audit --audit-level=high
+        continue-on-error: true
