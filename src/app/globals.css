@@ -1,0 +1,122 @@
+@import 'tailwindcss';
+
+/**
+ * Tasarım token'ları.
+ * Ürün modern, sosyal, premium ve enerjik görünmeli; klasik bahis sitesi /
+ * kumar estetiğinden (yeşil masa, altın-siyah, oran tabloları) kaçınılır.
+ */
+:root {
+  --background: #ffffff;
+  --foreground: #16243a;
+  --surface: #f7f8fb;
+  --border: #e2e6ef;
+  --muted: #5b6580;
+
+  /* Marka */
+  --brand: #b3261e; /* meydan kırmızısı — vurgu, CTA */
+  --brand-fg: #ffffff;
+  --ink: #16243a; /* lacivert — başlık ve gövde */
+
+  /* Anlam */
+  --correct: #2f7a46;
+  --incorrect: #b3261e;
+  --neutral: #5b6580;
+  --warning-bg: #fdf1ef;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-fg: var(--brand-fg);
+  --color-ink: var(--ink);
+  --color-correct: var(--correct);
+  --color-incorrect: var(--incorrect);
+  --color-warning-bg: var(--warning-bg);
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0e1524;
+    --foreground: #e8ecf5;
+    --surface: #162033;
+    --border: #26314a;
+    --muted: #93a0bb;
+    --ink: #e8ecf5;
+    --warning-bg: #2a1a19;
+
+    /*
+     * Koyu zeminde marka kırmızısı ve yeşil, açık zemindeki tonlarıyla
+     * yeterli kontrast vermez (WCAG AA, 4.5:1). Bu yüzden koyu temada
+     * açılırlar — aynı renk kimliği, okunabilir karşıtlık.
+     */
+    --brand: #e05a52;
+    --brand-fg: #16243a;
+    --correct: #57b877;
+    --incorrect: #e05a52;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* Erişilebilirlik: odak durumu her etkileşimli öğede görünür olmalı. */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/*
+ * Yalnızca ekran okuyucu için metin. Görsel olarak gizlenir ama DOM'da kalır;
+ * `display:none` ekran okuyucudan da gizlerdi.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Klavye kullanıcısı için "içeriğe atla" bağlantısı — odaklanınca görünür. */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 0.5rem;
+  z-index: 50;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--brand);
+  color: var(--brand-fg);
+  font-weight: 600;
+}
+.skip-link:focus {
+  top: 0.5rem;
+}
+
+/*
+ * Hareketi azaltma tercihi olan kullanıcıda animasyon çalışmaz.
+ * İskelet yükleyicilerin nabız efekti dâhil.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
