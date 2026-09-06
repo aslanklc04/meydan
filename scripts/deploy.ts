@@ -35,6 +35,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { eq, sql } from 'drizzle-orm';
 import postgres from 'postgres';
 import { db } from '../src/server/db';
+import { normalizeDatabaseUrl } from '../src/server/db/url';
 import { users } from '../src/server/db/schema';
 import { STARTER_EVENTS, seedBaseContent, seedEvent } from './catalog';
 
@@ -45,7 +46,11 @@ function say(step: string, detail = ''): void {
   console.warn(`[kurulum] ${step}${detail ? ` — ${detail}` : ''}`);
 }
 
-async function runMigrations(databaseUrl: string): Promise<void> {
+async function runMigrations(rawUrl: string): Promise<void> {
+  const { url: databaseUrl, dropped } = normalizeDatabaseUrl(rawUrl);
+  if (dropped.length > 0) {
+    say('bağlantı', `desteklenmeyen parametreler yok sayıldı: ${dropped.join(', ')}`);
+  }
   // max:1 — migration tek bağlantıda, sırayla çalışır.
   const client = postgres(databaseUrl, {
     max: 1,
