@@ -111,7 +111,15 @@ function warnAboutTolerated(env: NodeJS.ProcessEnv): void {
 }
 
 const clientSchema = z.object({
-  NEXT_PUBLIC_APP_NAME: z.string().default('MEYDAN'),
+  /**
+   * Boş metin de "tanımsız" sayılır — `.default()` tek başına yetmez.
+   * Next.js tanımlanmamış bir NEXT_PUBLIC_ değişkenini derlemede boş metin
+   * olarak gömer; aynı gerekçe için bkz. config/brand.ts.
+   */
+  NEXT_PUBLIC_APP_NAME: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined),
+    z.string().default('MEYDAN'),
+  ),
 });
 
 const skip = process.env.SKIP_ENV_VALIDATION === '1' || process.env.SKIP_ENV_VALIDATION === 'true';
