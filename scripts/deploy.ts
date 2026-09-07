@@ -34,6 +34,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { eq, sql } from 'drizzle-orm';
 import postgres from 'postgres';
+import { looksLikeEmail } from '../src/config/env';
 import { db } from '../src/server/db';
 import { normalizeDatabaseUrl } from '../src/server/db/url';
 import { users } from '../src/server/db/schema';
@@ -96,11 +97,18 @@ async function runMigrations(rawUrl: string): Promise<void> {
  * dağıtımda yükseltme kendiliğinden gerçekleşir.
  */
 async function bootstrapAdmin(): Promise<string | null> {
-  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  if (!email) {
+  const raw = process.env.ADMIN_EMAIL?.trim();
+  if (!raw) {
     say('yönetici', 'ADMIN_EMAIL tanımlı değil, atlandı');
     return null;
   }
+  // Biçim burada denetlenir: bozuk bir ADMIN_EMAIL yükseltmeyi atlatmalı,
+  // dağıtımı düşürmemeli (bkz. src/config/env.ts — hoşgörülü alan).
+  if (!looksLikeEmail(raw)) {
+    say('yönetici', 'ADMIN_EMAIL geçerli bir e-posta adresine benzemiyor, atlandı');
+    return null;
+  }
+  const email = raw.toLowerCase();
 
   // E-posta karşılaştırması büyük/küçük harften bağımsızdır: kurucu adresini
   // panele "Ad@Site.com" diye yazarsa da eşleşmelidir.
