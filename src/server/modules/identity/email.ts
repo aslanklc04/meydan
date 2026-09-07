@@ -1,5 +1,5 @@
 import { brand } from '@/config';
-import { serverEnv } from '@/config/env';
+import { looksLikeEmail, resolveEmailProvider, serverEnv } from '@/config/env';
 import { log } from '@/server/observability/logger';
 
 /**
@@ -115,13 +115,20 @@ async function postToProvider(to: string, message: Message, kind: MailKind): Pro
   const apiKey = process.env.EMAIL_API_KEY;
   const from = serverEnv.EMAIL_FROM;
 
-  if (!endpoint || !apiKey || !from) {
+  // Biçim burada denetlenir, uygulama açılışında DEĞİL: eksik ya da bozuk bir
+  // e-posta ayarı gönderimi durdurmalı, siteyi değil (bkz. config/env.ts).
+  const invalidFrom = !looksLikeEmail(from);
+  if (!endpoint || !apiKey || invalidFrom) {
     log.error('email.misconfigured', {
       operation: 'email.send',
       outcome: 'failure',
       kind,
-      // Adres ve anahtar YAZILMAZ; yalnızca hangisinin eksik olduğu.
-      missing: [!endpoint && 'EMAIL_API_URL', !apiKey && 'EMAIL_API_KEY', !from && 'EMAIL_FROM']
+      // Adres ve anahtar YAZILMAZ; yalnızca hangisinin eksik/bozuk olduğu.
+      missing: [
+        !endpoint && 'EMAIL_API_URL',
+        !apiKey && 'EMAIL_API_KEY',
+        invalidFrom && (from ? 'EMAIL_FROM(geçersiz)' : 'EMAIL_FROM'),
+      ]
         .filter(Boolean)
         .join(','),
     });
@@ -182,19 +189,24 @@ export const httpMailer: Mailer = {
 
 // ── Seçim ──────────────────────────────────────────────────────────────────
 
-/** `EMAIL_PROVIDER` değerinden adaptör seçer. Bilinmeyen değer → geliştirme. */
-export function selectMailer(provider = process.env.EMAIL_PROVIDER): Mailer {
-  switch (provider) {
-    case 'http':
-      return httpMailer;
-    case 'console':
-    case undefined:
-    case '':
-      return consoleMailer;
-    default:
-      log.warn('email.unknown_provider', { operation: 'email.select', provider });
-      return consoleMailer;
+/**
+ * `EMAIL_PROVIDER` değerinden adaptör seçer.
+ *
+ * Bilinmeyen değer arıza DEĞİLDİR: uyarı yazılır ve güvenli varsayılana
+ * (console) dönülür. Yanlış yazılmış bir sağlayıcı adının bütün siteyi
+ * durdurması orantısız olurdu — en kötü sonuç e-postanın gitmemesidir ve bu
+ * günlükte görünür.
+ */
+export function selectMailer(raw = process.env.EMAIL_PROVIDER): Mailer {
+  const trimmed = raw?.trim();
+  const resolved = resolveEmailProvider(trimmed);
+
+  if (trimmed && trimmed.toLowerCase() !== 'console' && trimmed.toLowerCase() !== 'http') {
+    // Değerin kendisi günlüğe YAZILMAZ; yalnızca tanınmadığı ve ne yapıldığı.
+    log.warn('email.unknown_provider', { operation: 'email.select', fallback: 'console' });
   }
+
+  return resolved === 'http' ? httpMailer : consoleMailer;
 }
 
 export const mailer: Mailer = selectMailer();
