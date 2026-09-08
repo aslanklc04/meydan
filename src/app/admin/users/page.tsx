@@ -25,13 +25,27 @@ export default async function AdminUsersPage() {
     <main className="space-y-4">
       <h1 className="text-ink text-xl font-bold">Kullanıcılar</h1>
 
+      {/*
+        E-POSTA SÜTUNU — neden var.
+
+        Kurucu kendi hesabının hangi adresle açıldığını hatırlayamadı ve
+        arayüzde bunu gösteren hiçbir yer yoktu; iki farklı adres arasında
+        tahmin yürütmek zorunda kaldık. Oysa değer veritabanında duruyordu
+        ve zaten bu sorguyla okunuyordu — sadece ekrana basılmıyordu.
+
+        Destek işinin de temel ihtiyacı budur: "giriş yapamıyorum" diyen bir
+        kullanıcının hangi adresle kayıtlı olduğunu görebilmek.
+      */}
       <DataTable
-        headers={['Kullanıcı', 'Rol', 'Durum', 'Katılım', 'Eylem']}
+        headers={['Kullanıcı', 'E-posta', 'Rol', 'Durum', 'Katılım', 'Eylem']}
         empty="Kullanıcı yok."
         rows={users.map((u) => [
           <Link key="u" href={`/u/${u.username}`} className="text-brand underline">
             @{u.username}
           </Link>,
+          <span key="e" className="text-muted break-all">
+            {u.email}
+          </span>,
           u.role,
           statusLabel[u.status] ?? u.status,
           u.createdAt.toLocaleDateString('tr-TR'),
