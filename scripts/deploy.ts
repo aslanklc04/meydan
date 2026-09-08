@@ -107,6 +107,18 @@ async function runMigrations(rawUrl: string): Promise<void> {
  */
 const FOUNDER_USERNAME = 'asklc0404';
 
+/**
+ * Kurucunun e-postası. Kullanıcı adı sabitinin YEDEĞİDİR, alternatifi değil:
+ * ikisi de denenir, hangisi tutarsa o hesap yükseltilir.
+ *
+ * İkisinin birden olmasının sebebi, hangisinin doğru olduğunu kesin
+ * bilmememizdir: kurucu siteye kaydolurken bundan farklı bir adres kullanmış
+ * olabilir. Kullanıcı adı ekranda görüldüğü için daha güvenilirdir; adres ise
+ * kullanıcı adı bir gün değişirse çalışmaya devam eder. Yanlış olan sessizce
+ * eşleşmez, zarar vermez.
+ */
+const FOUNDER_EMAIL = 'aslanklc04@gmail.com';
+
 type AdminTarget = { id: string; role: string; username: string };
 
 /**
@@ -158,12 +170,21 @@ async function findAdminTarget(): Promise<AdminTarget | null> {
     .from(users)
     .where(eq(users.usernameLower, wanted))
     .limit(1);
+  if (byUsername[0]) return byUsername[0];
 
-  if (!byUsername[0]) {
-    say('yönetici', `${source} ile eşleşen kayıt yok — kayıt olduktan sonra tekrar dağıtın`);
-    return null;
+  // Son deneme: koddaki kurucu adresi. Kullanıcı adı bir gün değişirse
+  // yükseltme buradan yürür.
+  if (!configured) {
+    const byFounderEmail = await db
+      .select(columns)
+      .from(users)
+      .where(sql`lower(${users.email}) = ${FOUNDER_EMAIL.toLowerCase()}`)
+      .limit(1);
+    if (byFounderEmail[0]) return byFounderEmail[0];
   }
-  return byUsername[0];
+
+  say('yönetici', `${source} ile eşleşen kayıt yok — kayıt olduktan sonra tekrar dağıtın`);
+  return null;
 }
 
 async function bootstrapAdmin(): Promise<string | null> {
