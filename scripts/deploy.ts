@@ -39,6 +39,7 @@ import { db } from '../src/server/db';
 import { normalizeDatabaseUrl } from '../src/server/db/url';
 import { users } from '../src/server/db/schema';
 import { STARTER_EVENTS, seedBaseContent, seedEvent } from './catalog';
+import { fixturesService } from '../src/server/modules/catalog/fixtures.service';
 
 /** Migration ve kurulum için tek, kısa ömürlü bağlantı. */
 const LOCK_KEY = 918_273_645;
@@ -261,6 +262,43 @@ async function anyAdminId(): Promise<string | null> {
   return rows[0]?.id ?? null;
 }
 
+/**
+ * MAÇLARI DAĞITIMDA HEMEN GETİR.
+ *
+ * NEDEN BURADA: maç içe aktarma bakım işinin içindeydi ve bakım işini iki
+ * şey tetikliyor —
+ *
+ *   • GitHub Actions (saatte bir): CRON_SECRET ve APP_URL adlı iki sırrın
+ *     depoda tanımlı olmasını ister. Tanımlı DEĞİLLER; iş bugüne kadar
+ *     BİR KEZ BİLE çalışmadı.
+ *   • Vercel cron: ücretsiz planda GÜNDE YALNIZCA BİR KEZ (03:20 UTC).
+ *
+ * Sonuç: kod maçları çekmeye hazırdı ama onu çağıran hiçbir şey çalışmıyordu.
+ * Kurucu haklı olarak "maçlar nerede" diye sordu ve ortada ne maç ne hata
+ * vardı. Otomasyonun yazılmış olması, tetiklenmiş olması demek değildir.
+ *
+ * Dağıtımda çalıştırmak bu bağı koparır: her dağıtımdan birkaç dakika sonra
+ * maçlar akışta olur, hiçbir zamanlayıcıya ve hiçbir sırra bağlı kalmadan.
+ * Bakım işi bunun yerine geçmez, üstüne biner: o çalıştığında maçlar
+ * tazelenir ve biten maçlar sonuçlanır.
+ *
+ * HATA DAĞITIMI DÜŞÜRMEZ: dış bir servisin erişilemez olması yüzünden yeni
+ * sürümün canlıya çıkmaması, çözdüğü sorundan büyük bir sorundur.
+ */
+async function importFixturesNow(): Promise<void> {
+  try {
+    const { imported, resolved } = await fixturesService.run();
+    say(
+      'maçlar',
+      imported === 0 && resolved === 0
+        ? 'yeni maç yok (kaynakta yaklaşan maç bulunmadı ya da hepsi zaten açık)'
+        : `${imported} maç açıldı, ${resolved} maç sonuçlandı`,
+    );
+  } catch (error) {
+    say('maçlar', `alınamadı, dağıtım sürüyor — ${error instanceof Error ? error.message : error}`);
+  }
+}
+
 async function main(): Promise<void> {
   const vercelEnv = process.env.VERCEL_ENV;
   if (vercelEnv && vercelEnv !== 'production') {
@@ -292,6 +330,8 @@ async function main(): Promise<void> {
   } else {
     say('açılış etkinlikleri', 'yönetici yok, atlandı');
   }
+
+  await importFixturesNow();
 
   const open = (await db.execute(
     sql`SELECT count(*)::int AS count FROM event WHERE status = 'OPEN'`,
