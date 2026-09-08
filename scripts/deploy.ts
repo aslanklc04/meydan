@@ -108,16 +108,25 @@ async function runMigrations(rawUrl: string): Promise<void> {
  */
 const FOUNDER_USERNAME = 'asklc0404';
 
-/**
- * Kurucunun MEYDAN'a KAYITLI olduğu adres — kullanıcı adı sabitinin yedeği.
+/*
+ * KURUCU E-POSTA SABİTİ KALDIRILDI — bilinçli olarak.
  *
- * DİKKAT, BURAYA KAYITLI OLMAYAN BİR ADRES YAZILMAZ. Önce kurucunun asıl
- * adresi (aslanklc04@gmail.com) yazılmıştı; oysa hesap yedek adresle
- * açılmıştı. Kayıtsız bir adresi burada tutmak, ileride o adresle kaydolan
- * HERHANGİ BİRİNİN — kullanıcı adı sabiti bir gün tutmazsa — yönetici
- * olabilmesi demekti. Sabit, sahibi belli ve zaten alınmış bir adres olmalı.
+ * Bir süre burada bir adres duruyordu ve iki kez YANLIŞ yazıldı: önce
+ * kurucunun hiç kaydolmadığı adres, sonra bir harf farkla başka bir adres.
+ * Doğrusunun ne olduğu hâlâ kesin değil.
+ *
+ * Bu, süs bir ayrıntı değil: buradaki adres YÖNETİCİLİK ANAHTARIDIR. Kayıtlı
+ * olmayan bir adres yazılırsa, ileride o adresle kaydolan HERHANGİ BİRİ —
+ * kullanıcı adı yolu bir gün tutmazsa — yönetici olabilir. Emin olunamayan
+ * bir değeri güvenlik kararında kullanmak, o kararı yazı-tura çevirmektir.
+ *
+ * Kullanıcı adı yolu ise kesin: `asklc0404` ekranda görünüyor, eşsiz,
+ * kurucunun elinde ve fiilen çalıştığı doğrulandı. Yedeğe ihtiyaç yok.
+ *
+ * Yönetici devri ya da kullanıcı adı değişimi gerektiğinde panele
+ * ADMIN_EMAIL veya ADMIN_USERNAME yazmak yeterlidir; ikisi de bu koddan
+ * önce gelir.
  */
-const FOUNDER_EMAIL = 'aklc0404@gmail.com';
 
 type AdminTarget = { id: string; role: string; username: string };
 
@@ -171,17 +180,6 @@ async function findAdminTarget(): Promise<AdminTarget | null> {
     .where(eq(users.usernameLower, wanted))
     .limit(1);
   if (byUsername[0]) return byUsername[0];
-
-  // Son deneme: koddaki kurucu adresi. Kullanıcı adı bir gün değişirse
-  // yükseltme buradan yürür.
-  if (!configured) {
-    const byFounderEmail = await db
-      .select(columns)
-      .from(users)
-      .where(sql`lower(${users.email}) = ${FOUNDER_EMAIL.toLowerCase()}`)
-      .limit(1);
-    if (byFounderEmail[0]) return byFounderEmail[0];
-  }
 
   say('yönetici', `${source} ile eşleşen kayıt yok — kayıt olduktan sonra tekrar dağıtın`);
   return null;
