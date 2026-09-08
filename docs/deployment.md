@@ -29,6 +29,7 @@ testleri tabloları `TRUNCATE` eder.
 | `EMAIL_PROVIDER` | — | `console` (varsayılan) \| `http` |
 | `EMAIL_FROM` / `EMAIL_API_URL` / `EMAIL_API_KEY` | `http` ise ✅ | Sağlayıcı bilgileri |
 | `ADMIN_EMAIL` | — | Bu adresle kayıtlı hesap dağıtımda yöneticiye yükseltilir (§8) |
+| `ADMIN_USERNAME` | — | Adres bilinmiyorsa kullanıcı adıyla yükseltme (§8) |
 | `NEXT_PUBLIC_APP_NAME` | — | Varsayılan `MEYDAN` |
 | `FOOTBALL_DATA_TOKEN` | — | Yoksa fikstür içe aktarma **sessizce kapalıdır** (§9) |
 | `FOOTBALL_DATA_COMPETITIONS` | — | Varsayılan `CL,PL,PD,SA,BL1,FL1` (§9) |
@@ -339,3 +340,37 @@ Sağlayıcı çökerse, anahtar süresi dolarsa ya da istek zaman aşımına uğ
 modül hata günlüğü yazar ve **sıfır maçla döner**. Fikstür işi bakım işinin
 **en sonunda** ve `try/catch` içinde çalışır: dış bir kaynağın kesintisi
 iadeleri ve kapanışları geri alamaz.
+
+---
+
+## 10. Yönetici kurulumu neden koddaki bir sabite de bakıyor
+
+`scripts/deploy.ts` yöneticiyi üç kaynaktan sırayla arar:
+
+1. `ADMIN_EMAIL` — panelde yazan adres
+2. `ADMIN_USERNAME` — panelde yazan kullanıcı adı
+3. `FOUNDER_USERNAME` — koddaki kurucu sabiti (son çare)
+
+Üçüncü basamak **isteyerek** eklendi ve gerekçesi şudur: yönetici kurulumu
+yalnızca ortam değişkenine bağlıyken, teknik olmayan kurucu değişkeni panele
+dört denemede kaydedemedi. Sonuç, yöneticisiz ve dolayısıyla **hiç etkinliği
+olmayan bir üründü** — kurulum adımının kendisi ürünü boş bırakıyordu.
+
+E-posta yerine kullanıcı adı seçildi: kurucunun hangi adresle kaydolduğu
+belirsizdi, kullanıcı adı ise arayüzde görünür ve doğrulanabilir.
+
+**Rol ataması zayıflamadı:**
+
+- Rol hâlâ istemciden gelen bir alanla atanmıyor; kayıt formunda `role` alanı
+  yok. Saldırı yüzeyi değişmedi.
+- Kullanıcı adı eşsizdir (`user_username_lower_key`) ve kurucunun elindedir;
+  başkası aynı adı alıp yükseltilemez.
+- Sabiti değiştirebilen kişinin zaten depo yazma ve dağıtım yetkisi vardır;
+  o kişi bu satır olmadan da her şeyi yapabilir.
+- Parola hiçbir yolda saklanmıyor.
+
+Yükseltme aynı anda `email_verified` alanını da doldurur: kurucu, e-posta
+sağlayıcısı bağlanmadan önce kaydolduğu için doğrulama kodu hiç gelmemişti.
+
+**Yönetici devri** gerektiğinde panele `ADMIN_EMAIL` yazmak yeterlidir; o
+değer sabiti ezer ve bu satıra dokunmak gerekmez.
