@@ -29,11 +29,22 @@ import { log } from '@/server/observability/logger';
 
 export type MailKind = 'verification' | 'password_reset' | 'account_exists';
 
+/**
+ * DÖNÜŞ DEĞERİ `true` = e-posta GERÇEKTEN bir sağlayıcıya teslim edildi.
+ *
+ * NEDEN VAR: gönderim başarısız olduğunda kullanıcıya yine de "e-postana
+ * gönderdik" deniyordu. Canlıda tam olarak bu oldu — sağlayıcı, doğrulanmamış
+ * alan adı yüzünden hesap sahibi dışındaki adreslere göndermeyi reddetti;
+ * kayıt olan kişi "gönderdik" yazısını gördü ve boş gelen kutusunu bekledi.
+ *
+ * Kullanıcıya söylenen şey ile olan şey ayrılmamalı. Gönderilemediyse bunu
+ * SÖYLEMEK, sessizce yalan söylemekten iyidir.
+ */
 export type Mailer = {
-  sendEmailVerification(to: string, token: string): Promise<void>;
-  sendPasswordReset(to: string, token: string): Promise<void>;
+  sendEmailVerification(to: string, token: string): Promise<boolean>;
+  sendPasswordReset(to: string, token: string): Promise<boolean>;
   /** Zaten kayıtlı bir adrese kayıt denemesi yapıldığında gönderilir. */
-  sendAccountExistsNotice(to: string): Promise<void>;
+  sendAccountExistsNotice(to: string): Promise<boolean>;
 };
 
 const appUrl = (): string => (serverEnv.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
@@ -83,19 +94,27 @@ function accountExistsMessage(): Message {
 
 // ── Geliştirme adaptörü ────────────────────────────────────────────────────
 
+/**
+ * Geliştirme adaptörü. HER ZAMAN `false` döner: bağlantı günlüğe yazılır ama
+ * kullanıcının gelen kutusuna HİÇBİR ŞEY GİTMEZ. Buradan `true` dönmek,
+ * arayüzün "gönderdik" demesine yol açardı ve bu doğru olmazdı.
+ */
 export const consoleMailer: Mailer = {
   async sendEmailVerification(to, token) {
     console.warn(
       `[mail] ${brand.appName} doğrulama → ${to}\n  ${appUrl()}/verify-email?token=${token}`,
     );
+    return false;
   },
   async sendPasswordReset(to, token) {
     console.warn(
       `[mail] ${brand.appName} parola sıfırlama → ${to}\n  ${appUrl()}/reset-password?token=${token}`,
     );
+    return false;
   },
   async sendAccountExistsNotice(to) {
     console.warn(`[mail] ${brand.appName} — ${to} adresi zaten kayıtlı, giriş yapılabilir.`);
+    return false;
   },
 };
 
@@ -110,7 +129,7 @@ export const consoleMailer: Mailer = {
  * fırlatmak, sağlayıcının kısa bir kesintisinde kayıt akışını tamamen
  * durdururdu.
  */
-async function postToProvider(to: string, message: Message, kind: MailKind): Promise<void> {
+async function postToProvider(to: string, message: Message, kind: MailKind): Promise<boolean> {
   const endpoint = process.env.EMAIL_API_URL;
   const apiKey = process.env.EMAIL_API_KEY;
   const from = serverEnv.EMAIL_FROM;
@@ -132,7 +151,7 @@ async function postToProvider(to: string, message: Message, kind: MailKind): Pro
         .filter(Boolean)
         .join(','),
     });
-    return;
+    return false;
   }
 
   const startedAt = Date.now();
@@ -155,7 +174,7 @@ async function postToProvider(to: string, message: Message, kind: MailKind): Pro
         status: response.status,
         durationMs: Date.now() - startedAt,
       });
-      return;
+      return false;
     }
 
     log.info('email.sent', {
@@ -164,6 +183,7 @@ async function postToProvider(to: string, message: Message, kind: MailKind): Pro
       kind,
       durationMs: Date.now() - startedAt,
     });
+    return true;
   } catch (error) {
     log.error('email.failed', {
       operation: 'email.send',
@@ -172,18 +192,19 @@ async function postToProvider(to: string, message: Message, kind: MailKind): Pro
       durationMs: Date.now() - startedAt,
       error,
     });
+    return false;
   }
 }
 
 export const httpMailer: Mailer = {
   async sendEmailVerification(to, token) {
-    await postToProvider(to, verificationMessage(token), 'verification');
+    return postToProvider(to, verificationMessage(token), 'verification');
   },
   async sendPasswordReset(to, token) {
-    await postToProvider(to, passwordResetMessage(token), 'password_reset');
+    return postToProvider(to, passwordResetMessage(token), 'password_reset');
   },
   async sendAccountExistsNotice(to) {
-    await postToProvider(to, accountExistsMessage(), 'account_exists');
+    return postToProvider(to, accountExistsMessage(), 'account_exists');
   },
 };
 
