@@ -356,6 +356,23 @@ Toplu liste lig başına son 15 biten maçı verir. Bakım işi günlerce
 saatten eski ve hâlâ açık olan etkinlikler tek tek sorgulanır (koşu başına
 en fazla 10). Böylece hiçbir çip süresiz askıda kalmaz.
 
+### Ne zaman çalışır
+
+| Tetikleyici | Sıklık | Not |
+|---|---|---|
+| **Dağıtım** (`scripts/deploy.ts`) | Her dağıtımda | Sır ya da zamanlayıcı gerektirmez |
+| Vercel cron | Günde bir (03:20 UTC) | Ücretsiz planın sınırı |
+| GitHub Actions | Saatte bir | `CRON_SECRET` + `APP_URL` sırları tanımlıysa |
+
+Dağıtım adımı **bilinçli olarak** eklendi. Öncesinde içe aktarma yalnızca
+bakım işinin içindeydi ve bakım işini tetikleyen iki yolun ikisi de fiilen
+çalışmıyordu: GitHub Actions sırları hiç tanımlanmamıştı, Vercel cron ise
+günde bir kez. Sonuç, maç çekmeye hazır ama **bir kez bile çağrılmamış** bir
+entegrasyondu. Otomasyonun yazılmış olması tetiklenmiş olması demek değildir.
+
+Dağıtımdaki hata dağıtımı düşürmez: dış bir servisin erişilemez olması
+yüzünden yeni sürümün canlıya çıkmaması, çözdüğü sorundan büyüktür.
+
 ### Yönetici gerekliliği
 
 Etkinliğin bir sahibi olmak zorundadır. **Sistemde ADMIN rolünde hesap yoksa
