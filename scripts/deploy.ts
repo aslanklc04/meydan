@@ -80,56 +80,104 @@ async function runMigrations(rawUrl: string): Promise<void> {
 }
 
 /**
- * YÖNETİCİ KURULUMU — güvenli yol.
+ * KURUCU HESABI — son çare.
+ *
+ * NEDEN VAR: yönetici kurulumu ADMIN_EMAIL ortam değişkenine bağlıydı ve bu,
+ * teknik olmayan kurucu için pratikte AŞILAMAZ bir engel çıktı — değişken
+ * dört ayrı denemede panele kaydedilemedi ve site yöneticisiz kaldı.
+ * Yöneticisiz site demek, hiç etkinlik açılamaması, yani BOŞ BİR ÜRÜN demek.
+ *
+ * E-POSTA DEĞİL KULLANICI ADI: kurucunun hangi adresle kayıt olduğu belirsiz
+ * (kayıt sırasında ikinci bir adres kullanılmış). Kullanıcı adı ise ekranda
+ * görünür ve doğrulanmıştır. Yanlış bir sabit, sessizce hiçbir şey yapmaz.
+ *
+ * GÜVENLİK GEREKÇESİ — bu, rol atamasını zayıflatmaz:
+ *   • Rol hâlâ İSTEMCİDEN GELEN BİR ALANLA atanmıyor; kayıt formunda "role"
+ *     alanı yok ve olmayacak. Saldırı yüzeyi değişmedi.
+ *   • Kullanıcı adı EŞSİZDİR (user_username_lower_key) ve bu ad kurucunun
+ *     elinde. Başkası aynı adı alıp yükseltilemez.
+ *   • Bu sabiti değiştirebilen kişinin zaten depoya yazma ve dağıtım yetkisi
+ *     vardır; o kişi bu satır olmadan da her şeyi yapabilir. Yeni bir tehdit
+ *     doğmuyor.
+ *   • Parola hâlâ hiçbir yerde yazmıyor. Kurucu parolasını kendi belirler.
+ *
+ * ADMIN_EMAIL / ADMIN_USERNAME tanımlıysa ONLAR KAZANIR; bu sabit yalnızca
+ * ikisi de yokken devreye girer. Yönetici devri gerektiğinde ortam değişkeni
+ * yazmak yeterlidir, bu satıra dokunmak gerekmez.
+ */
+const FOUNDER_USERNAME = 'asklc0404';
+
+type AdminTarget = { id: string; role: string; username: string };
+
+/**
+ * YÖNETİCİ KURULUMU.
  *
  * Rol İSTEMCİDEN GELEN BİR DEĞERLE atanmaz; kayıt formunda "role" diye bir
- * alan yoktur ve olmayacaktır. Yükseltmenin tek yolu budur: dağıtım
- * ortamındaki ADMIN_EMAIL değişkeninde yazan adres, o adresle GERÇEKTEN
- * kayıt olmuş bir hesaba denk geliyorsa yükseltilir.
+ * alan yoktur ve olmayacaktır. Yükseltme yalnızca dağıtım ortamının
+ * söylediği hesaba uygulanır — sırasıyla:
  *
- * Bu üç şeyi birden sağlar:
- *   • parola kaynak kodda ya da ortam değişkeninde yazmaz — kurucu parolasını
- *     kendi belirler, kimse (bu betik dâhil) bilmez;
- *   • yükseltme için SQL yazmak gerekmez;
- *   • ADMIN_EMAIL'i yalnızca dağıtım panelinde yazabilen kişi değiştirebilir.
+ *   1. ADMIN_EMAIL      panelde yazan adres
+ *   2. ADMIN_USERNAME   panelde yazan kullanıcı adı
+ *   3. FOUNDER_USERNAME koddaki kurucu sabiti (son çare, yukarıya bakınız)
+ *
+ * Parola hiçbir yolda saklanmaz: kurucu parolasını kendi belirler, bu betik
+ * dâhil kimse bilmez.
  *
  * Hesap henüz yoksa sessizce atlanır: kurucu siteye kaydolduktan sonraki ilk
  * dağıtımda yükseltme kendiliğinden gerçekleşir.
  */
-async function bootstrapAdmin(): Promise<string | null> {
-  const raw = process.env.ADMIN_EMAIL?.trim();
-  if (!raw) {
-    say('yönetici', 'ADMIN_EMAIL tanımlı değil, atlandı');
-    return null;
-  }
-  // Biçim burada denetlenir: bozuk bir ADMIN_EMAIL yükseltmeyi atlatmalı,
-  // dağıtımı düşürmemeli (bkz. src/config/env.ts — hoşgörülü alan).
-  if (!looksLikeEmail(raw)) {
-    say('yönetici', 'ADMIN_EMAIL geçerli bir e-posta adresine benzemiyor, atlandı');
-    return null;
-  }
-  const email = raw.toLowerCase();
+async function findAdminTarget(): Promise<AdminTarget | null> {
+  const columns = { id: users.id, role: users.role, username: users.username };
 
-  // E-posta karşılaştırması büyük/küçük harften bağımsızdır: kurucu adresini
-  // panele "Ad@Site.com" diye yazarsa da eşleşmelidir.
-  const found = await db
-    .select({ id: users.id, role: users.role, username: users.username })
+  const rawEmail = process.env.ADMIN_EMAIL?.trim();
+  if (rawEmail) {
+    // Biçim burada denetlenir: bozuk bir ADMIN_EMAIL yükseltmeyi atlatmalı,
+    // dağıtımı düşürmemeli (bkz. src/config/env.ts — hoşgörülü alan).
+    if (!looksLikeEmail(rawEmail)) {
+      say('yönetici', 'ADMIN_EMAIL geçerli bir e-posta adresine benzemiyor, atlandı');
+    } else {
+      // Karşılaştırma büyük/küçük harften bağımsız: panele "Ad@Site.com"
+      // yazılsa da eşleşmelidir.
+      const byEmail = await db
+        .select(columns)
+        .from(users)
+        .where(sql`lower(${users.email}) = ${rawEmail.toLowerCase()}`)
+        .limit(1);
+      if (byEmail[0]) return byEmail[0];
+      // Adres GÜNLÜĞE YAZILMAZ; yalnızca sonucun kendisi.
+      say('yönetici', 'ADMIN_EMAIL ile eşleşen kayıt yok, kullanıcı adına bakılıyor');
+    }
+  }
+
+  const configured = process.env.ADMIN_USERNAME?.trim();
+  const wanted = (configured || FOUNDER_USERNAME).toLowerCase();
+  const source = configured ? 'ADMIN_USERNAME' : 'kurucu sabiti';
+
+  const byUsername = await db
+    .select(columns)
     .from(users)
-    .where(sql`lower(${users.email}) = ${email}`)
+    .where(eq(users.usernameLower, wanted))
     .limit(1);
 
-  const user = found[0];
-  if (!user) {
-    // Adres GÜNLÜĞE YAZILMAZ; yalnızca sonucun kendisi.
-    say('yönetici', 'ADMIN_EMAIL ile eşleşen kayıt yok — kayıt olduktan sonra tekrar dağıtın');
+  if (!byUsername[0]) {
+    say('yönetici', `${source} ile eşleşen kayıt yok — kayıt olduktan sonra tekrar dağıtın`);
     return null;
   }
+  return byUsername[0];
+}
+
+async function bootstrapAdmin(): Promise<string | null> {
+  const user = await findAdminTarget();
+  if (!user) return null;
 
   if (user.role === 'ADMIN') {
     say('yönetici', `@${user.username} zaten yönetici`);
     return user.id;
   }
 
+  // Yükseltme aynı zamanda e-postayı doğrulanmış sayar: kurucu, e-posta
+  // sağlayıcısı bağlanmadan önce kaydolduğu için doğrulama kodu asla
+  // gelmedi ve hesabı doğrulanmamış durumda kaldı.
   await db
     .update(users)
     .set({ role: 'ADMIN', emailVerified: new Date() })
