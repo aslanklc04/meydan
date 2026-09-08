@@ -138,6 +138,50 @@ async function bootstrapAdmin(): Promise<string | null> {
   return user.id;
 }
 
+/**
+ * BOŞ İÇERİK ÜRETEN ŞABLONU DURDUR — Faz 7.
+ *
+ * Kodda şablonu kaldırmak YETMEZ: şablon satırı zaten veritabanındadır ve
+ * bakım işi ondan her gün yeni etkinlik üretmeye devam eder. Bu yüzden
+ * kurulum, mevcut satırı etkin olmaktan çıkarır.
+ *
+ * Üretilen sorular cevaplanamazdı:
+ *   "2026-09-08 tarihli günün maçını ev sahibi mi kazanacak?" — HANGİ MAÇ?
+ * Takım adı yoktu; kullanıcı neye tahmin ettiğini, yönetici de sonucu
+ * bilemezdi.
+ *
+ * SİLİNMİYOR, PASİFLEŞTİRİLİYOR: satır dururken üretim durur. Gerçek fikstür
+ * verisi bağlandığında `active = true` yapmak yeterlidir — geçmiş kaybolmaz.
+ *
+ * Zaten üretilmiş, HİÇ TAHMİN ALMAMIŞ gelecek tarihli etkinlikler de iptal
+ * edilir. Tahmin almış olanlara DOKUNULMAZ: bir kullanıcının çipini
+ * bağladığı etkinliği sessizce iptal etmek, düzeltmesi gereken sorundan
+ * daha kötü bir davranıştır.
+ */
+async function stopPlaceholderTemplate(): Promise<void> {
+  const deactivated = (await db.execute(sql`
+    UPDATE event_template SET active = false
+     WHERE slug = 'gunun-super-lig-maci' AND active = true
+    RETURNING id
+  `)) as unknown as { id: string }[];
+
+  const cancelled = (await db.execute(sql`
+    UPDATE event SET status = 'CANCELLED'
+     WHERE slug LIKE 'gunun-super-lig-maci-%'
+       AND status IN ('DRAFT', 'OPEN')
+       AND NOT EXISTS (SELECT 1 FROM prediction p WHERE p.event_id = event.id)
+    RETURNING id
+  `)) as unknown as { id: string }[];
+
+  if (deactivated.length > 0 || cancelled.length > 0) {
+    say(
+      'yer tutucu şablon',
+      `${deactivated.length > 0 ? 'durduruldu' : 'zaten duruyordu'}` +
+        `, ${cancelled.length} boş etkinlik iptal edildi`,
+    );
+  }
+}
+
 /** Açılış etkinlikleri için bir yönetici gerekir (etkinliğin sahibi olur). */
 async function anyAdminId(): Promise<string | null> {
   const rows = await db
@@ -164,7 +208,9 @@ async function main(): Promise<void> {
   await runMigrations(databaseUrl);
 
   await seedBaseContent();
-  say('başlangıç içeriği', 'kategoriler, rozetler, sezon ve şablon hazır');
+  say('başlangıç içeriği', 'kategoriler, rozetler ve sezon hazır');
+
+  await stopPlaceholderTemplate();
 
   const adminId = (await bootstrapAdmin()) ?? (await anyAdminId());
 
