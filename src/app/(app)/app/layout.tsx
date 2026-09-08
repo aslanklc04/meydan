@@ -40,6 +40,26 @@ export default async function AppLayout({ children }: { readonly children: React
               <span className="text-ink font-semibold" title={brand.ratingName}>
                 <span aria-hidden="true">🧠</span> {Math.round(rating.power)}
               </span>
+              {/*
+                YÖNETİM BAĞLANTISI — yalnızca yöneticiye görünür.
+
+                Panel (üye sayısı, kim kayıt olmuş, etkinlik açma, çip defteri
+                denetimi) baştan beri vardı ama arayüzde ona giden HİÇBİR
+                bağlantı yoktu; kurucu adresini bilmediği için panelin
+                varlığından habersizdi. Yazılmış ama ulaşılamayan özellik,
+                yazılmamış özelliktir.
+              */}
+              {actor.role === 'ADMIN' || actor.role === 'MODERATOR' ? (
+                <Link
+                  href="/admin"
+                  aria-label="Yönetim paneli"
+                  className="text-ink focus-visible:outline-ink flex min-h-11 min-w-11 items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2"
+                >
+                  <span aria-hidden="true" className="text-lg">
+                    ⚙️
+                  </span>
+                </Link>
+              ) : null}
               <Link
                 href="/app/search"
                 aria-label="Ara"
