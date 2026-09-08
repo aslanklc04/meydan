@@ -109,16 +109,15 @@ async function runMigrations(rawUrl: string): Promise<void> {
 const FOUNDER_USERNAME = 'asklc0404';
 
 /**
- * Kurucunun e-postası. Kullanıcı adı sabitinin YEDEĞİDİR, alternatifi değil:
- * ikisi de denenir, hangisi tutarsa o hesap yükseltilir.
+ * Kurucunun MEYDAN'a KAYITLI olduğu adres — kullanıcı adı sabitinin yedeği.
  *
- * İkisinin birden olmasının sebebi, hangisinin doğru olduğunu kesin
- * bilmememizdir: kurucu siteye kaydolurken bundan farklı bir adres kullanmış
- * olabilir. Kullanıcı adı ekranda görüldüğü için daha güvenilirdir; adres ise
- * kullanıcı adı bir gün değişirse çalışmaya devam eder. Yanlış olan sessizce
- * eşleşmez, zarar vermez.
+ * DİKKAT, BURAYA KAYITLI OLMAYAN BİR ADRES YAZILMAZ. Önce kurucunun asıl
+ * adresi (aslanklc04@gmail.com) yazılmıştı; oysa hesap yedek adresle
+ * açılmıştı. Kayıtsız bir adresi burada tutmak, ileride o adresle kaydolan
+ * HERHANGİ BİRİNİN — kullanıcı adı sabiti bir gün tutmazsa — yönetici
+ * olabilmesi demekti. Sabit, sahibi belli ve zaten alınmış bir adres olmalı.
  */
-const FOUNDER_EMAIL = 'aslanklc04@gmail.com';
+const FOUNDER_EMAIL = 'aklc0404@gmail.com';
 
 type AdminTarget = { id: string; role: string; username: string };
 
