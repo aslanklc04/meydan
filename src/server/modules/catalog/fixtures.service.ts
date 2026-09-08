@@ -48,7 +48,14 @@ import { resolutionService } from '@/server/modules/resolution/service';
  * yoktur.
  */
 
-const API_BASE = 'https://www.thesportsdb.com/api/v1/json';
+/**
+ * Sağlayıcı adresi. Ayarlanabilir olması TEST İÇİNDİR: entegrasyonun gerçekten
+ * etkinlik açtığı, sahte bir sunucuya karşı uçtan uca doğrulanabilsin.
+ * Üretimde ayarlanmaz.
+ */
+function apiBase(): string {
+  return process.env.THESPORTSDB_BASE?.trim() || 'https://www.thesportsdb.com/api/v1/json';
+}
 
 /**
  * TheSportsDB'nin BELGELENMİŞ ücretsiz anahtarı (dakikada 30 istek).
@@ -147,7 +154,7 @@ function kickoffAt(event: ApiEvent): Date | null {
 
 async function callApi(path: string): Promise<{ events?: ApiEvent[] | null } | null> {
   try {
-    const response = await fetch(`${API_BASE}/${apiKey()}${path}`, {
+    const response = await fetch(`${apiBase()}/${apiKey()}${path}`, {
       signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) {
