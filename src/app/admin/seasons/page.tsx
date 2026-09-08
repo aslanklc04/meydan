@@ -36,13 +36,17 @@ export default async function AdminSeasonsPage() {
       />
 
       <div className="flex flex-wrap gap-2">
+        {/*
+          Ok fonksiyonuyla sarmak sayfayı düşürür — bkz. src/app/admin/page.tsx
+          içindeki açıklama. Argüman `.bind` ile bağlanır.
+        */}
         <ActionButton
           label="Sezon sıralamasını üret"
-          action={() => generateLeaderboardAction({ period: 'SEASON' })}
+          action={generateLeaderboardAction.bind(null, { period: 'SEASON' })}
         />
         <ActionButton
           label="Aylık sıralamayı üret"
-          action={() => generateLeaderboardAction({ period: 'MONTHLY' })}
+          action={generateLeaderboardAction.bind(null, { period: 'MONTHLY' })}
         />
       </div>
     </main>
