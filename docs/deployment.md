@@ -31,8 +31,8 @@ testleri tabloları `TRUNCATE` eder.
 | `ADMIN_EMAIL` | — | Bu adresle kayıtlı hesap dağıtımda yöneticiye yükseltilir (§8) |
 | `ADMIN_USERNAME` | — | Adres bilinmiyorsa kullanıcı adıyla yükseltme (§8) |
 | `NEXT_PUBLIC_APP_NAME` | — | Varsayılan `MEYDAN` |
-| `FOOTBALL_DATA_TOKEN` | — | Yoksa fikstür içe aktarma **sessizce kapalıdır** (§9) |
-| `FOOTBALL_DATA_COMPETITIONS` | — | Varsayılan `CL,PL,PD,SA,BL1,FL1` (§9) |
+| `THESPORTSDB_KEY` | — | **Gerekmez.** Ücretsiz anahtar koda gömülü (§9) |
+| `THESPORTSDB_LEAGUES` | — | Varsayılan `4339,4480,4328` (§9) |
 
 **Bu listenin kaynağı `src/config/env.ts`'tir.** Ad tahmin edilmez; değişken
 eklenirse önce şemaya, sonra buraya yazılır.
@@ -279,7 +279,7 @@ yükseltme kendiliğinden gerçekleşir.
 
 ---
 
-## 9. Fikstür kaynağı — football-data.org
+## 9. Fikstür kaynağı — TheSportsDB
 
 ### Neden bağlandı
 
@@ -288,58 +288,85 @@ Faz 3'ten kalan tekrarlayan şablon her gün şu etkinliği üretiyordu:
 > "2026-09-08 tarihli günün maçını ev sahibi mi kazanacak?"
 
 **Hangi maç?** Takım adı olmayan bir soru ne tahmin edilebilir ne
-sonuçlandırılabilir. Otomatik içerik üretimi, arkasında gerçek bir veri
-kaynağı olmadan anlamsızdır. Şablon `scripts/deploy.ts` içinde
-pasifleştirildi; yerine bu modül geldi.
+sonuçlandırılabilir. Şablon `scripts/deploy.ts` içinde pasifleştirildi;
+yerine bu modül geldi.
+
+### Neden football-data.org değil
+
+Önce football-data.org bağlanmıştı. İki sebeple terk edildi:
+
+1. **Anahtarsız sessiz boşluk.** Anahtar olmadan `/matches` ucu hata
+   döndürmüyor, `{"resultSet":{"count":0},"matches":[]}` döndürüyor.
+   Entegrasyon "çalışıyor" görünüp sonsuza kadar sıfır maç getirir ve kimse
+   sebebini anlamaz. Arızanın en kötü türü budur: sessiz olanı. (Lige özel
+   uçlar anahtarsız 403 verir.)
+2. **Süper Lig ücretsiz katmanda yok.** Türk kullanıcıya Bundesliga
+   göstermek, ürünün en güçlü kancasını çöpe atmaktır.
+
+### Kurulum gerektirmez
+
+TheSportsDB'nin **belgelenmiş ücretsiz anahtarı** koda gömülüdür. Gizli bir
+değer değildir; sağlayıcının kendi belgesinde herkese açık yazar. Bu yüzden
+panele hiçbir şey yazmadan maçlar akmaya başlar. Ücretli anahtar alınırsa
+`THESPORTSDB_KEY` varsayılanı ezer.
+
+Varsayılan ligler: **4339** Süper Lig, **4480** Şampiyonlar Ligi,
+**4328** Premier Lig.
+
+### İstek bütçesi
+
+Ücretsiz katman dakikada 30 istek verir. Bir bakım koşusunda lig başına iki
+istek gider (yaklaşanlar + bitenler), yani varsayılan üç ligde altı istek.
+Buna ek olarak, gecikmiş maçlar için koşu başına en fazla 10 tekil sorgu
+yapılır.
 
 ### Kapsam: yalnızca "kim kazanır"
 
 Üç sonuç üretilir — ev sahibi / beraberlik / deplasman. Alt-üst, çifte şans,
-karşılıklı gol, toplam gol gibi türler **bilinçli olarak yoktur**. Bunlar
-bahis ürünlerinin pazar menüsüdür; Faz 5 terminoloji kuralı bu dili yasaklar
-ve ürünün "beceriye dayalı tahmin oyunu" konumunu zayıflatır. Testler bu
-kelimelerin sonuç etiketlerinde geçmediğini doğrular
-(`tests/integration/fixtures.test.ts`).
+karşılıklı gol gibi türler **bilinçli olarak yoktur**: bunlar bahis
+ürünlerinin pazar menüsüdür ve Faz 5 terminoloji kuralı bu dili yasaklar.
+Testler bu kelimelerin sonuç etiketlerinde geçmediğini doğrular.
 
-### İstek bütçesi
+### Sonuçlandırma — üç ayrı durum
 
-Ücretsiz plan **dakikada 10 istek** verir. Bu yüzden bütün turnuvalar tek
-`competitions=` parametresiyle **tek istekte** sorgulanır; turnuva başına
-ayrı istek atılmaz. Bakım işi çalıştığında en fazla iki istek gider:
-biri içe aktarma, biri sonuçlandırma.
+Bunları birbirine karıştırmak pahalıya patlar:
 
-Anahtar `X-Auth-Token` **başlığında** gider, adreste değil — adres günlüklere
-ve tarayıcı geçmişine düşer.
+| Durum | Yapılan | Neden |
+|---|---|---|
+| Maç bitmedi (`NS`, `1H`, `2H`, `HT`) | **Dokunulmaz** | Oynanmakta olan maçı sonuçlandırmak, kullanıcının çipini maç sürerken elinden almaktır |
+| Maç bitti, skor okunuyor | Kazanan yazılır | — |
+| Maç bitti ama skor okunamıyor | **İade** | Kimse haksız kaybetmez |
+| Ertelendi / iptal (`PST`, `CANC`, `ABD`) | **İade** | Ertelenen maç aylar sonra oynanabilir; çip o kadar askıda kalmamalı |
 
-### Kapsam sınırı
+İlk sürümde "bitmedi" ile "skor okunamıyor" aynı kefeye konmuştu ve devam
+eden maçlar iade ediliyordu; bunu entegrasyon testi yakaladı.
 
-Ücretsiz katmanda **Süper Lig yoktur** (sağlayıcının kapsam tablosundan
-doğrulandı). Türk takımları Şampiyonlar Ligi maçlarında görünür. Varsayılan
-liste ücretsiz katmanın kapsadığı altı turnuvadır.
-
-### Sonuçlandırma
-
-Biten maçlar `resolutionService.resolve()` üzerinden sonuçlandırılır — çip
-defteri, Meydan Okuma kapanışı ve itibar güncellemesi aynı yoldan geçer, yan
-kapı yoktur. Kazanan belirsizse (hükmen, iptal, eksik veri) etkinlik **VOID**
-edilir ve çipler iade edilir; kimse haksız kaybetmez.
+Sonuçlandırma `resolutionService.resolve()` üzerinden yapılır — çip defteri,
+Meydan Okuma kapanışı ve itibar güncellemesi aynı yoldan geçer, yan kapı
+yoktur.
 
 Yalnızca bu modülün açtığı etkinliklere dokunulur (`mac-` slug öneki). Elle
 açılmış etkinlikleri otomatik sonuçlandırmak, yöneticinin kararını gasp
 etmek olurdu.
 
+### Gecikmiş maçlar
+
+Toplu liste lig başına son 15 biten maçı verir. Bakım işi günlerce
+çalışmazsa bu listeden düşen maçlar olabilir; bu yüzden kapanış saati 3
+saatten eski ve hâlâ açık olan etkinlikler tek tek sorgulanır (koşu başına
+en fazla 10). Böylece hiçbir çip süresiz askıda kalmaz.
+
 ### Yönetici gerekliliği
 
 Etkinliğin bir sahibi olmak zorundadır. **Sistemde ADMIN rolünde hesap yoksa
-hiç maç içe aktarılmaz** ve günlüğe `fixtures.no_admin` düşer. Yani
-`ADMIN_EMAIL` ayarlanmadan fikstür de gelmez (§8).
+hiç maç içe aktarılmaz** ve günlüğe `fixtures.no_admin` düşer (bkz. §10).
 
 ### Arıza davranışı
 
-Sağlayıcı çökerse, anahtar süresi dolarsa ya da istek zaman aşımına uğrarsa
-modül hata günlüğü yazar ve **sıfır maçla döner**. Fikstür işi bakım işinin
-**en sonunda** ve `try/catch` içinde çalışır: dış bir kaynağın kesintisi
-iadeleri ve kapanışları geri alamaz.
+Sağlayıcı çökerse ya da istek zaman aşımına uğrarsa modül hata günlüğü yazar
+ve sıfır maçla döner. Fikstür işi bakım işinin **en sonunda** ve `try/catch`
+içinde çalışır: dış bir kaynağın kesintisi iadeleri ve kapanışları geri
+alamaz.
 
 ---
 
@@ -349,7 +376,13 @@ iadeleri ve kapanışları geri alamaz.
 
 1. `ADMIN_EMAIL` — panelde yazan adres
 2. `ADMIN_USERNAME` — panelde yazan kullanıcı adı
-3. `FOUNDER_USERNAME` — koddaki kurucu sabiti (son çare)
+3. `FOUNDER_USERNAME` — koddaki kurucu kullanıcı adı
+4. `FOUNDER_EMAIL` — koddaki kurucu adresi
+
+Son ikisi birbirinin **yedeğidir**, alternatifi değil: hangisi tutarsa o
+hesap yükseltilir. İkisinin birden olmasının sebebi, kurucunun siteye hangi
+adresle kaydolduğunun kesin bilinmemesidir. Yanlış olan sessizce eşleşmez.
+Hiçbiri tutmazsa **kimse yükseltilmez** — yanlışlıkla yönetici doğmaz.
 
 Üçüncü basamak **isteyerek** eklendi ve gerekçesi şudur: yönetici kurulumu
 yalnızca ortam değişkenine bağlıyken, teknik olmayan kurucu değişkeni panele
