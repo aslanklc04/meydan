@@ -1,12 +1,23 @@
 import Link from 'next/link';
+import { after } from 'next/server';
 import { redirect } from 'next/navigation';
 import { currentActor } from '@/server/auth';
+import { jobsService } from '@/server/modules/governance/jobs.service';
+import { log } from '@/server/observability/logger';
 import { coinService } from '@/server/modules/economy/service';
 import { reputationService } from '@/server/modules/reputation/service';
 import { notificationService } from '@/server/modules/social/notification.service';
 import { brand } from '@/config';
 import { formatCount } from '@/lib/utils';
 import { ToastProvider } from '@/components/feedback/Toast';
+
+/**
+ * Bakım işi bu kadar dakikadan eskiyse ziyarette yeniden çalıştırılır.
+ *
+ * 20 dakika bilinçli: Meydan Okuma iadesi en geç bu kadar gecikir, ama sıradan
+ * bir gezinme sırasında iş sürekli yeniden tetiklenmez.
+ */
+const STALE_AFTER_MINUTES = 20;
 
 /**
  * Oturum içi kabuk — MOBİL ÖNCELİKLİ.
@@ -24,6 +35,39 @@ export default async function AppLayout({ children }: { readonly children: React
     reputationService.getSummary(actor.id),
     notificationService.unreadCount(actor.id),
   ]);
+
+  /*
+   * ZİYARET TETİKLEYİCİSİ — bakım işi kendi kendine yürüsün.
+   *
+   * PROBLEM: bakım işini (maç çekme, biten maçı sonuçlandırma, süresi dolan
+   * Meydan Okumayı iade etme, etkinlik kapatma) iki şey tetikliyordu:
+   *   • GitHub Actions, saatte bir — depoda iki sır tanımlı olmadığı için
+   *     bugüne kadar HİÇ çalışmadı;
+   *   • Vercel cron — ücretsiz planda GÜNDE BİR KEZ.
+   * Sonuç: akşam biten bir maç ertesi sabaha kadar sonuçlanmıyordu.
+   *
+   * ÇÖZÜM: birisi siteyi her ziyaret ettiğinde, iş BAYATLAMIŞSA çalıştırılır.
+   * Böylece hiçbir sırra, hiçbir dış zamanlayıcıya bağlı kalınmaz.
+   *
+   * `after()` işi YANITTAN SONRA çalıştırır: kullanıcı beklemez, sayfa
+   * yavaşlamaz. Bayatlık denetimi tek ucuz sorgudur.
+   *
+   * ÇİFT ÇALIŞMA İMKÂNSIZ: `runScheduled` PostgreSQL advisory lock alır; aynı
+   * anda gelen ikinci ziyaret `skipped` alıp hiçbir şey yapmaz. Aynı iade iki
+   * kez yapılamaz.
+   *
+   * Hata YUTULUR: bakım işinin arızası sayfayı düşürmemeli — kullanıcı akışını
+   * görmeye devam etmeli.
+   */
+  after(async () => {
+    try {
+      const minutes = await jobsService.minutesSinceLastSuccess();
+      if (minutes !== null && minutes < STALE_AFTER_MINUTES) return;
+      await jobsService.runScheduled({ jobName: 'maintenance' });
+    } catch (error) {
+      log.error('jobs.visit_trigger_failed', { operation: 'jobs.visit', error });
+    }
+  });
 
   return (
     <ToastProvider>
