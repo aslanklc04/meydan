@@ -30,6 +30,8 @@ testleri tabloları `TRUNCATE` eder.
 | `EMAIL_FROM` / `EMAIL_API_URL` / `EMAIL_API_KEY` | `http` ise ✅ | Sağlayıcı bilgileri |
 | `ADMIN_EMAIL` | — | Bu adresle kayıtlı hesap dağıtımda yöneticiye yükseltilir (§8) |
 | `NEXT_PUBLIC_APP_NAME` | — | Varsayılan `MEYDAN` |
+| `FOOTBALL_DATA_TOKEN` | — | Yoksa fikstür içe aktarma **sessizce kapalıdır** (§9) |
+| `FOOTBALL_DATA_COMPETITIONS` | — | Varsayılan `CL,PL,PD,SA,BL1,FL1` (§9) |
 
 **Bu listenin kaynağı `src/config/env.ts`'tir.** Ad tahmin edilmez; değişken
 eklenirse önce şemaya, sonra buraya yazılır.
@@ -273,3 +275,67 @@ Bunun üç sonucu vardır:
 
 Hesap henüz yoksa adım sessizce atlanır; kayıt olduktan sonraki ilk dağıtımda
 yükseltme kendiliğinden gerçekleşir.
+
+---
+
+## 9. Fikstür kaynağı — football-data.org
+
+### Neden bağlandı
+
+Faz 3'ten kalan tekrarlayan şablon her gün şu etkinliği üretiyordu:
+
+> "2026-09-08 tarihli günün maçını ev sahibi mi kazanacak?"
+
+**Hangi maç?** Takım adı olmayan bir soru ne tahmin edilebilir ne
+sonuçlandırılabilir. Otomatik içerik üretimi, arkasında gerçek bir veri
+kaynağı olmadan anlamsızdır. Şablon `scripts/deploy.ts` içinde
+pasifleştirildi; yerine bu modül geldi.
+
+### Kapsam: yalnızca "kim kazanır"
+
+Üç sonuç üretilir — ev sahibi / beraberlik / deplasman. Alt-üst, çifte şans,
+karşılıklı gol, toplam gol gibi türler **bilinçli olarak yoktur**. Bunlar
+bahis ürünlerinin pazar menüsüdür; Faz 5 terminoloji kuralı bu dili yasaklar
+ve ürünün "beceriye dayalı tahmin oyunu" konumunu zayıflatır. Testler bu
+kelimelerin sonuç etiketlerinde geçmediğini doğrular
+(`tests/integration/fixtures.test.ts`).
+
+### İstek bütçesi
+
+Ücretsiz plan **dakikada 10 istek** verir. Bu yüzden bütün turnuvalar tek
+`competitions=` parametresiyle **tek istekte** sorgulanır; turnuva başına
+ayrı istek atılmaz. Bakım işi çalıştığında en fazla iki istek gider:
+biri içe aktarma, biri sonuçlandırma.
+
+Anahtar `X-Auth-Token` **başlığında** gider, adreste değil — adres günlüklere
+ve tarayıcı geçmişine düşer.
+
+### Kapsam sınırı
+
+Ücretsiz katmanda **Süper Lig yoktur** (sağlayıcının kapsam tablosundan
+doğrulandı). Türk takımları Şampiyonlar Ligi maçlarında görünür. Varsayılan
+liste ücretsiz katmanın kapsadığı altı turnuvadır.
+
+### Sonuçlandırma
+
+Biten maçlar `resolutionService.resolve()` üzerinden sonuçlandırılır — çip
+defteri, Meydan Okuma kapanışı ve itibar güncellemesi aynı yoldan geçer, yan
+kapı yoktur. Kazanan belirsizse (hükmen, iptal, eksik veri) etkinlik **VOID**
+edilir ve çipler iade edilir; kimse haksız kaybetmez.
+
+Yalnızca bu modülün açtığı etkinliklere dokunulur (`mac-` slug öneki). Elle
+açılmış etkinlikleri otomatik sonuçlandırmak, yöneticinin kararını gasp
+etmek olurdu.
+
+### Yönetici gerekliliği
+
+Etkinliğin bir sahibi olmak zorundadır. **Sistemde ADMIN rolünde hesap yoksa
+hiç maç içe aktarılmaz** ve günlüğe `fixtures.no_admin` düşer. Yani
+`ADMIN_EMAIL` ayarlanmadan fikstür de gelmez (§8).
+
+### Arıza davranışı
+
+Sağlayıcı çökerse, anahtar süresi dolarsa ya da istek zaman aşımına uğrarsa
+modül hata günlüğü yazar ve **sıfır maçla döner**. Fikstür işi bakım işinin
+**en sonunda** ve `try/catch` içinde çalışır: dış bir kaynağın kesintisi
+iadeleri ve kapanışları geri alamaz.
