@@ -4,6 +4,7 @@ import { challenges, events, jobRuns } from '@/server/db/schema';
 import { coinService, ledgerKeys } from '@/server/modules/economy/service';
 import { catalogService } from '@/server/modules/catalog/service';
 import { recurringService } from '@/server/modules/catalog/recurring.service';
+import { fixturesService } from '@/server/modules/catalog/fixtures.service';
 import { rankingService } from '@/server/modules/ranking/service';
 import {
   notificationService,
@@ -54,6 +55,10 @@ export type JobReport = {
   readonly skippedEvents: number;
   /** Silinen süresi dolmuş oran sınırlama sayacı. */
   readonly prunedCounters: number;
+  /** Fikstürden açılan maç etkinliği (FOOTBALL_DATA_TOKEN yoksa 0). */
+  readonly importedFixtures: number;
+  /** Skoru gelip kendiliğinden sonuçlanan maç. */
+  readonly resolvedFixtures: number;
 };
 
 export const jobsService = {
@@ -162,12 +167,27 @@ export const jobsService = {
     // süresiz büyür ve geçmiş sayaçlar hiçbir işe yaramaz.
     const prunedCounters = await pruneRateLimitCounters(now);
 
+    // Fikstür işi EN SONA konur ve kendi hatasını yutar: dış bir servisin
+    // erişilemez olması, iade ve kapanış gibi kritik işleri geriye almamalı.
+    // Onlar bu satıra gelindiğinde çoktan tamamlanmıştır.
+    let importedFixtures = 0;
+    let resolvedFixtures = 0;
+    try {
+      const fixtures = await fixturesService.run();
+      importedFixtures = fixtures.imported;
+      resolvedFixtures = fixtures.resolved;
+    } catch (error) {
+      log.error(logEvents.jobFailed, { job: 'fixtures', error });
+    }
+
     return {
       expiredChallenges,
       closedEvents,
       generatedEvents: generation.created,
       skippedEvents: generation.skipped,
       prunedCounters,
+      importedFixtures,
+      resolvedFixtures,
     };
   },
 
