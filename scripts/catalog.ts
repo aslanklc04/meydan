@@ -12,7 +12,7 @@
  */
 import { eq } from 'drizzle-orm';
 import { db } from '../src/server/db';
-import { badges, categories, eventTemplates, events, seasons } from '../src/server/db/schema';
+import { badges, categories, events, seasons } from '../src/server/db/schema';
 import { catalogService } from '../src/server/modules/catalog/service';
 
 export const CATEGORIES = [
@@ -106,16 +106,20 @@ export type StarterEvent = {
  * Yönetici bunları yönetim panelinden silebilir ya da değiştirebilir.
  */
 export const STARTER_EVENTS: readonly StarterEvent[] = [
+  // NOT: spor kategorisinde OTOMATİK açılış etkinliği yoktur.
+  // Sebep yasak değil, CEVAPLANABİLİRLİK: takım adı içermeyen bir soru
+  // ("haftanın derbisi") sonradan sonuçlandırılamaz. Gerçek maçlar,
+  // takım adlarıyla birlikte yönetim panelinden açılır — spor kategorisi
+  // yerinde duruyor ve çalışıyor.
   {
-    categorySlug: 'spor',
-    title: 'Haftanın Süper Lig derbisi',
-    question: 'Haftanın derbisini ev sahibi mi kazanacak?',
-    slug: 'haftanin-super-lig-derbisi',
-    hours: 48,
+    categorySlug: 'dunya',
+    title: 'Bu yıl Nobel Barış Ödülü',
+    question: 'Bu yılki Nobel Barış Ödülü bir kuruma mı verilecek?',
+    slug: 'nobel-baris-odulu-kurum',
+    hours: 72,
     outcomes: [
-      { key: 'HOME', label: 'Ev sahibi kazanır' },
-      { key: 'DRAW', label: 'Beraberlik' },
-      { key: 'AWAY', label: 'Deplasman kazanır' },
+      { key: 'ORG', label: 'Bir kuruma' },
+      { key: 'PERSON', label: 'Bir kişiye' },
     ],
   },
   {
@@ -233,39 +237,35 @@ export async function seedSeason(): Promise<boolean> {
 }
 
 /**
- * Tekrarlayan etkinlik şablonu — ADR-16.
- * Bakım işi bu şablondan günlük etkinlik üretir; akış kendi kendini besler.
+ * TEKRARLAYAN ETKİNLİK ŞABLONU — Faz 7'de DEVRE DIŞI BIRAKILDI.
+ *
+ * ── NEDEN KALDIRILDI ───────────────────────────────────────────────────────
+ * Buradaki şablon her gün otomatik olarak şu soruyu üretiyordu:
+ *
+ *     "2026-09-08 tarihli günün maçını ev sahibi mi kazanacak?"
+ *
+ * HANGİ MAÇ? Takım adı yok. Soru CEVAPLANAMAZ: kullanıcı neye tahmin
+ * ettiğini bilmiyor, yönetici de sonucu belirleyemiyor. Faz 3'te tekrarlama
+ * motorunu sınamak için konmuş bir yer tutucuydu; gerçek içerik olarak
+ * tasarlanmamıştı ve canlıya bu hâliyle çıktı.
+ *
+ * Otomatik etkinlik üretimi, arkasında GERÇEK BİR VERİ KAYNAĞI olmadan
+ * anlamsız soru üretir. Fikstür verisi bağlanana kadar doğru davranış,
+ * etkinlikleri yöneticinin bilerek açmasıdır.
+ *
+ * ── İKİNCİ SEBEP: DENETİM ─────────────────────────────────────────────────
+ * Kendi kendine içerik üreten bir sistemde yönetici, sitesinde hangi
+ * soruların sorulduğunu kontrol edemez. Etkinlikler bilerek açıldığında
+ * hem içerik doğru olur hem de sorumluluk açıkça yöneticide kalır.
+ *
+ * ── GERİ ALMAK ────────────────────────────────────────────────────────────
+ * Şema, tekrarlama motoru ve `event_template` tablosu YERİNDE DURUYOR.
+ * Gerçek fikstür verisi bağlandığında (ve hukuki cevap geldiğinde) buraya
+ * takım adlarını içeren bir şablon eklemek yeterlidir. Hiçbir yetenek
+ * kaybedilmedi; yalnızca boş içerik üreten tek şablon kapatıldı.
  */
 export async function seedTemplate(): Promise<boolean> {
-  const spor = await db
-    .select({ id: categories.id })
-    .from(categories)
-    .where(eq(categories.slug, 'spor'))
-    .limit(1);
-  const categoryId = spor[0]?.id;
-  if (!categoryId) return false;
-
-  await db
-    .insert(eventTemplates)
-    .values({
-      slug: 'gunun-super-lig-maci',
-      categoryId,
-      titlePattern: 'Günün Süper Lig maçı — {tarih}',
-      questionPattern: '{tarih} tarihli günün maçını ev sahibi mi kazanacak?',
-      slugPattern: 'gunun-super-lig-maci-{tarih}',
-      outcomes: [
-        { key: 'HOME', label: 'Ev sahibi kazanır' },
-        { key: 'DRAW', label: 'Beraberlik' },
-        { key: 'AWAY', label: 'Deplasman kazanır' },
-      ],
-      recurrence: 'DAILY',
-      closesAtLocal: '18:00',
-      resolvesAtLocal: '23:30',
-      generateAheadDays: 2,
-    })
-    .onConflictDoNothing();
-
-  return true;
+  return false;
 }
 
 /** Verilen etkinlik zaten varsa hiçbir şey yapmaz; yoksa açar. */
