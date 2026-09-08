@@ -66,14 +66,33 @@ function apiBase(): string {
  */
 const FREE_KEY = '123';
 
-/** 4339 Süper Lig · 4480 Şampiyonlar Ligi · 4328 Premier Lig. */
-const DEFAULT_LEAGUES = '4339,4480,4328';
+/**
+ * Kapsanan ligler. Her kimlik sağlayıcıya TEK TEK sorularak doğrulandı —
+ * tahmin edilmedi:
+ *
+ *   4339 Süper Lig          4676 1. Lig
+ *   4480 Şampiyonlar Ligi   4328 Premier Lig
+ *   4335 La Liga            4332 Serie A          4331 Bundesliga
+ *
+ * NEDEN BU KADAR ÇOK: tek ligle, milli arada ya da hafta ortasında akış
+ * boşalıyor. Kurucunun ilk canlı denemesinde yalnızca 2-3 maç geldi; sebep
+ * kodun arızası değil, o hafta o ligde başka maç olmamasıydı. Yedi lig,
+ * akışın her gün dolu kalmasını sağlar.
+ *
+ * İSTEK BÜTÇESİ: bir bakım koşusunda 7 (yaklaşanlar) + 7 (bitenler) +
+ * en fazla 5 (gecikmiş) = 19 istek. Ücretsiz katmanın dakikada 30 istek
+ * sınırının altında kalır. Lig eklerken bu hesabı gözden geçir.
+ */
+const DEFAULT_LEAGUES = '4339,4676,4480,4328,4335,4332,4331';
 
 /** Etkinlik slug'ı dış maç kimliğini taşır: ayrı bir sütuna gerek kalmaz. */
 const SLUG_PREFIX = 'mac-';
 
-/** Bir koşuda tek tek sorgulanacak en fazla geç kalmış maç (istek bütçesi). */
-const MAX_STRAGGLER_LOOKUPS = 10;
+/**
+ * Bir koşuda tek tek sorgulanacak en fazla gecikmiş maç.
+ * 7 lig × 2 + 5 = 19 istek; ücretsiz katmanın dakikada 30 sınırının altında.
+ */
+const MAX_STRAGGLER_LOOKUPS = 5;
 
 /** Maçın bittiğini kabul ettiğimiz durumlar. */
 const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN', 'Match Finished', 'FINISHED']);
