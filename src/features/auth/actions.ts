@@ -70,10 +70,26 @@ export async function registerAction(_prev: ActionState, formData: FormData): Pr
     await enforceSharedRateLimit('auth.register', ipHash ? { ipHash } : {});
 
     const result = await identityService.register({ ...parsed.data });
-    await mailer.sendEmailVerification(parsed.data.email, result.verificationToken);
+
+    /*
+     * "GÖNDERDİK" DEMEDEN ÖNCE GERÇEKTEN GÖNDERİLDİĞİNE BAK.
+     *
+     * Önceki hâl gönderim sonucuna bakmadan "e-postana gönderdik" diyordu.
+     * Canlıda sağlayıcı, doğrulanmamış alan adı yüzünden hesap sahibi
+     * dışındaki adreslere göndermeyi reddetti; kayıt olan kişi bu yazıyı
+     * gördü ve boş gelen kutusunu bekledi. Kullanıcıya söylenen şey ile olan
+     * şey ayrılmamalı.
+     *
+     * Gönderilemese bile KAYIT BAŞARILIDIR ve giriş yapılabilir: doğrulama
+     * hiçbir yeri kilitlemiyor. Bu yüzden hata değil, dürüst bir bilgi
+     * mesajı gösterilir.
+     */
+    const sent = await mailer.sendEmailVerification(parsed.data.email, result.verificationToken);
     return {
       status: 'success',
-      message: 'Hesabın oluşturuldu. Doğrulama bağlantısını e-postana gönderdik.',
+      message: sent
+        ? 'Hesabın oluşturuldu. Doğrulama bağlantısını e-postana gönderdik.'
+        : 'Hesabın oluşturuldu ve kullanıma hazır. Doğrulama e-postası şu an gönderilemedi; giriş yapabilirsin.',
     };
   } catch (error) {
     return toErrorState(error);
@@ -145,6 +161,18 @@ export async function requestPasswordResetAction(
       ...(ipHash ? { ipHash } : {}),
     });
 
+    /*
+     * BURADA gönderim sonucu KASITLI OLARAK yok sayılır — kayıt akışının
+     * aksine.
+     *
+     * Kayıtta "gönderilemedi" demek dürüstlüktür, çünkü adresin sahibi zaten
+     * karşındaki kişidir. Burada aynı şeyi yapmak, "bu adres kayıtlı mı"
+     * sorusunu yanıtlamak olur: gönderim denendiyse kayıtlı, denenmediyse
+     * değil. Saldırgan böylece hangi adreslerin sistemde olduğunu tek tek
+     * öğrenebilir.
+     *
+     * Bu yüzden yanıt her koşulda aynıdır ve sonuç yalnızca günlüğe düşer.
+     */
     const result = await identityService.requestPasswordReset(parsed.data.email);
     if (result) await mailer.sendPasswordReset(parsed.data.email, result.token);
     return genericResponse;
