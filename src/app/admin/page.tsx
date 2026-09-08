@@ -98,14 +98,30 @@ export default async function AdminHomePage() {
           Bakım işleri idempotenttir; iki kez çalıştırmak zararsızdır.
         </p>
         <div className="flex flex-wrap gap-2">
+          {/*
+            DİKKAT — action prop'una OK FONKSİYONU sarma.
+
+            ActionButton bir istemci bileşenidir. Sunucu bileşeninden istemci
+            bileşenine geçirilen bir fonksiyon, ancak SUNUCU EYLEMİNİN KENDİSİ
+            ise serileştirilebilir. Onu bir ok fonksiyonuyla sarmak sıradan bir
+            closure üretir; React bunu serileştiremez ve SAYFANIN TAMAMI
+            "Yönetim ekranı yüklenemedi" hatasıyla düşer.
+
+            Bu hata derlemede ve tip denetiminde GÖRÜNMEZ; yalnızca sayfa
+            gerçekten açıldığında ortaya çıkar. Özet ve Sezonlar sayfaları
+            tam olarak bu yüzden açılmıyordu.
+
+            Doğru yol argüman bağlamaktır: `.bind(null, ...)` sunucu eylemi
+            kimliğini korur.
+          */}
           <ActionButton label="Bakım işlerini çalıştır" action={runMaintenanceJobsAction} />
           <ActionButton
             label="Haftalık sıralamayı üret"
-            action={() => generateLeaderboardAction({ period: 'WEEKLY' })}
+            action={generateLeaderboardAction.bind(null, { period: 'WEEKLY' })}
           />
           <ActionButton
             label="Tüm zamanlar sıralaması"
-            action={() => generateLeaderboardAction({ period: 'ALL_TIME' })}
+            action={generateLeaderboardAction.bind(null, { period: 'ALL_TIME' })}
           />
         </div>
       </section>
