@@ -8,6 +8,7 @@ import { enforceSharedRateLimit } from '@/server/security/shared-rate-limit';
 import { currentIpHash } from '@/server/security/request-identity';
 import { log, logEvents } from '@/server/observability/logger';
 import { mailer } from '@/server/modules/identity/email';
+import { safeNext } from './safe-next';
 import {
   loginSchema,
   registerSchema,
@@ -114,10 +115,21 @@ export async function loginAction(_prev: ActionState, formData: FormData): Promi
       ...(ipHash ? { ipHash } : {}),
     });
 
+    /*
+     * NİYETE DÖNÜŞ (Faz 8).
+     *
+     * Bir Meydan Okuma bağlantısından gelen kişi giriş yaptıktan sonra akışa
+     * düşerse neden geldiğini kaybeder. Gelinen yer forma gizli alan olarak
+     * taşınır ve buradan geri verilir.
+     *
+     * `safeNext` olmadan bu satır AÇIK YÖNLENDİRME açığı olurdu: saldırgan
+     * `?next=https://sahte-meydan.com` bağlantısını paylaşır, kullanıcı
+     * gerçek siteye giriş yapar ve kendini sahte bir ekranda bulur.
+     */
     await signIn('credentials', {
       email: parsed.data.email,
       password: parsed.data.password,
-      redirectTo: '/app/feed',
+      redirectTo: safeNext(formData.get('next') as string | null),
     });
     return { status: 'success', message: 'Giriş yapıldı.' };
   } catch (error) {
