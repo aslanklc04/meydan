@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { events, eventOutcomes, predictions, users } from '@/server/db/schema';
 import type { ConsensusSnapshot } from '@/server/db/schema/catalog';
@@ -190,11 +190,23 @@ export const consensusService = {
     return share < socialProof.loneWolf.maxWinningSideShare;
   },
 
-  /** Etkinliğin sonuç seçeneklerini okur — arayüzün etiketleri için. */
+  /**
+   * Etkinliğin sonuç seçenekleri — arayüzün etiketleri için.
+   *
+   * SIRALAMA ŞART. Bu satır olmadan PostgreSQL satırları istediği sırada
+   * döndürür ve canlıda tam olarak şu görüldü: başlık
+   * "PSV Eindhoven — Shakhtar Donetsk" derken düğmeler
+   * "Beraberlik / Shakhtar / PSV" sırasıyla çıktı. Kullanıcı ev sahibini
+   * ortada arar, yanlış düğmeye basar.
+   *
+   * `sortOrder` etkinlik açılırken yazılır (ev sahibi, beraberlik, deplasman);
+   * doğru sıra veride zaten var, yalnızca istenmiyordu.
+   */
   async outcomesOf(eventId: string, ctx: Ctx = db) {
     return ctx
       .select({ id: eventOutcomes.id, key: eventOutcomes.key, label: eventOutcomes.label })
       .from(eventOutcomes)
-      .where(eq(eventOutcomes.eventId, eventId));
+      .where(eq(eventOutcomes.eventId, eventId))
+      .orderBy(asc(eventOutcomes.sortOrder));
   },
 };
