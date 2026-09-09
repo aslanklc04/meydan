@@ -4,6 +4,7 @@ import { challenges, events, jobRuns } from '@/server/db/schema';
 import { coinService, ledgerKeys } from '@/server/modules/economy/service';
 import { catalogService } from '@/server/modules/catalog/service';
 import { recurringService } from '@/server/modules/catalog/recurring.service';
+import { featuredService } from '@/server/modules/catalog/featured.service';
 import { fixturesService } from '@/server/modules/catalog/fixtures.service';
 import { rankingService } from '@/server/modules/ranking/service';
 import {
@@ -55,6 +56,8 @@ export type JobReport = {
   readonly skippedEvents: number;
   /** Silinen süresi dolmuş oran sınırlama sayacı. */
   readonly prunedCounters: number;
+  /** Bugüne Günün Meydanı seçildi mi (zaten varsa false). */
+  readonly featuredSelected: boolean;
   /** Fikstürden açılan maç etkinliği (FOOTBALL_DATA_TOKEN yoksa 0). */
   readonly importedFixtures: number;
   /** Skoru gelip kendiliğinden sonuçlanan maç. */
@@ -180,12 +183,30 @@ export const jobsService = {
       log.error(logEvents.jobFailed, { job: 'fixtures', error });
     }
 
+    /*
+     * GÜNÜN MEYDANI — fikstür içe aktarmadan SONRA seçilir.
+     *
+     * Sıra önemli: yeni maçlar akışa girmeden seçim yapılsaydı, sabahın ilk
+     * koşusunda aday havuzu dünkü etkinliklerden ibaret olurdu ve o günün
+     * Meydanı hep bayat içerikten seçilirdi.
+     *
+     * Hata yutulur: Günün Meydanı seçilememesi, iade ve kapanış gibi kritik
+     * işlerin sonucunu geçersiz kılmamalı.
+     */
+    let featuredSelected = false;
+    try {
+      featuredSelected = (await featuredService.ensureDaily(now)) !== null;
+    } catch (error) {
+      log.error(logEvents.jobFailed, { job: 'featured', error });
+    }
+
     return {
       expiredChallenges,
       closedEvents,
       generatedEvents: generation.created,
       skippedEvents: generation.skipped,
       prunedCounters,
+      featuredSelected,
       importedFixtures,
       resolvedFixtures,
     };
