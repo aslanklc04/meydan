@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { brand, economy, rating } from '@/config';
 import { FinancialDisclaimer } from '@/components/disclaimers/FinancialDisclaimer';
+import { featuredService } from '@/server/modules/catalog/featured.service';
+import { consensusService } from '@/server/modules/catalog/consensus.service';
+import { DailyMeydan } from '@/features/daily/components/DailyMeydan';
+import { timeRemaining } from '@/features/predictions/labels';
 
 /**
  * Karşılama sayfası — sitenin ön kapısı.
@@ -21,7 +25,30 @@ export const metadata = {
   alternates: { canonical: '/' },
 };
 
-export default function Home() {
+/*
+ * Ana sayfa her istekte üretilir: Günün Meydanı ve katılımcı sayısı canlı
+ * veridir. Statik üretilseydi ziyaretçi dünkü soruyu görürdü.
+ */
+export const dynamic = 'force-dynamic';
+
+export default async function Home() {
+  /*
+   * GÜNÜN MEYDANI — hero'nun hemen altında.
+   *
+   * Kayıt duvarı ÖNCE değil SONRA gelir: ziyaretçi ürünün ne olduğunu
+   * anlatan bir metin değil, ürünün kendisini görür ve bir tıklamayla
+   * içine girer. Değeri görmeden hesap istemek, en pahalı adımı en başa
+   * koymaktır.
+   */
+  const featured = await featuredService.today();
+
+  /*
+   * Giriş yapmamış ziyaretçi TAHMİN YAPMAMIŞ sayılır, bu yüzden dağılım
+   * hiç istenmez — yalnızca toplam katılımcı sayısı okunur. Sunucu o veriyi
+   * üretmediği için sayfa kaynağına da düşmez.
+   */
+  const consensus = featured ? await consensusService.view(featured.id, null) : null;
+  const outcomes = featured ? await consensusService.outcomesOf(featured.id) : [];
   return (
     <main id="icerik" className="mx-auto w-full max-w-2xl flex-1 px-6 py-16">
       <h1 className="text-ink text-5xl font-bold tracking-tight">{brand.appName}</h1>
@@ -29,6 +56,26 @@ export default function Home() {
 
       <p className="text-ink mt-6 text-xl">{brand.tagline}</p>
       <p className="text-muted mt-2 leading-relaxed">{brand.description}</p>
+
+      {featured && outcomes.length > 0 ? (
+        <div className="mt-10">
+          <DailyMeydan
+            slug={featured.slug}
+            title={featured.title}
+            question={featured.question}
+            outcomes={outcomes.map((o) => ({ id: o.id, label: o.label }))}
+            total={consensus?.total ?? 0}
+            closesInLabel={timeRemaining(featured.closesAt)}
+            categoryIcon={featured.categoryIcon}
+            categoryName={featured.categoryName}
+          />
+          {featured.isFinancial && (
+            <div className="mt-3">
+              <FinancialDisclaimer />
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {/* ── Ön kapı ─────────────────────────────────────────────────────── */}
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
