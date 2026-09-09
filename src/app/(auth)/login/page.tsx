@@ -2,16 +2,30 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { loginAction } from '@/features/auth/actions';
 import { AuthForm, Field } from '@/features/auth/components/AuthForm';
+import { safeNext } from '@/features/auth/safe-next';
 
 export const metadata: Metadata = { title: 'Giriş Yap', robots: { index: false, follow: false } };
 
-export default function LoginPage() {
+/**
+ * `next`: kullanıcının GELDİĞİ yer. Gizli alanla forma taşınır ve giriş
+ * başarılı olunca oraya dönülür. Değer `safeNext` ile süzülür — süzülmeseydi
+ * bu parametre açık yönlendirme açığı olurdu.
+ */
+export default async function LoginPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
+  const target = safeNext(next);
+
   return (
     <>
       <h1 className="text-ink text-xl font-semibold">Giriş Yap</h1>
       <p className="text-muted mt-1 mb-5 text-sm">Meydana geri dön.</p>
 
       <AuthForm action={loginAction} submitLabel="Giriş Yap">
+        <input type="hidden" name="next" value={target} />
         <Field label="E-posta" name="email" type="email" autoComplete="email" />
         <Field label="Parola" name="password" type="password" autoComplete="current-password" />
       </AuthForm>
@@ -24,7 +38,10 @@ export default function LoginPage() {
         </p>
         <p>
           Hesabın yok mu?{' '}
-          <Link href="/register" className="text-brand underline">
+          <Link
+            href={`/register?next=${encodeURIComponent(target)}`}
+            className="text-brand underline"
+          >
             Meydana katıl
           </Link>
         </p>
