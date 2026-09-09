@@ -125,7 +125,7 @@ export function DailyMeydan({
         </div>
       )}
 
-      <p className="text-muted mt-4 text-xs">Tahminler {closesInLabel} kapanıyor.</p>
+      <p className="text-muted mt-4 text-xs">Tahminlere {closesInLabel} kaldı.</p>
     </section>
   );
 }
