@@ -3,13 +3,26 @@ import Link from 'next/link';
 import { registerAction } from '@/features/auth/actions';
 import { AuthForm, Field } from '@/features/auth/components/AuthForm';
 import { brand } from '@/config';
+import { safeNext } from '@/features/auth/safe-next';
 
 export const metadata: Metadata = {
   title: 'Meydana Katıl',
   robots: { index: false, follow: false },
 };
 
-export default function RegisterPage() {
+/**
+ * Kayıt, kullanıcıyı oturum açmış hâle GETİRMEZ; kaydolan kişi ardından giriş
+ * yapar. Bu yüzden `next` burada tüketilmez, GİRİŞ SAYFASINA taşınır —
+ * niyet zincirin sonuna kadar korunmalı, yoksa iki adım sonra kaybolur.
+ */
+export default async function RegisterPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
+  const target = safeNext(next);
+
   return (
     <>
       <h1 className="text-ink text-xl font-semibold">Meydana Katıl</h1>
@@ -53,7 +66,7 @@ export default function RegisterPage() {
 
       <p className="text-muted mt-5 text-sm">
         Zaten hesabın var mı?{' '}
-        <Link href="/login" className="text-brand underline">
+        <Link href={`/login?next=${encodeURIComponent(target)}`} className="text-brand underline">
           Giriş yap
         </Link>
       </p>
