@@ -7,7 +7,7 @@
  * Not: `env.ts` bilinçli olarak buradan yeniden dışa aktarılmaz — sunucu sırları
  * istemci paketine sızmasın diye doğrudan `@/config/env` üzerinden import edilir.
  */
-export { brand, financialDisclaimer } from './brand';
+export { brand, financialDisclaimer, legalContactEmail } from './brand';
 export { economy, isStakeAllowed } from './economy';
 export { rating, formLambda } from './rating';
 export { expertise } from './expertise';
