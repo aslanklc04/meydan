@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { currentActor } from '@/server/auth';
 import { catalogService } from '@/server/modules/catalog/service';
+import { consensusService } from '@/server/modules/catalog/consensus.service';
 import { profileService } from '@/server/modules/social/profile.service';
 import { EventCard } from '@/features/events/components/EventCard';
 import { FinancialDisclaimer } from '@/components/disclaimers/FinancialDisclaimer';
@@ -50,6 +51,13 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
   const event = await catalogService.getPublicEvent(slug, actor?.id ?? null);
   if (!event) notFound();
 
+  /*
+   * Dağılım TEK KARAR NOKTASINDAN geçer. Sayfa kendi yüzdesini hesaplasaydı
+   * (ve hesaplıyordu) "önce sen söyle" ve "düşük örneklemde yüzde yok"
+   * kuralları burada sessizce delinirdi — canlıda tam olarak bu oldu.
+   */
+  const consensus = await consensusService.view(event.id, event.myOutcomeId);
+
   const topPredictors = await profileService.topPredictorsForEvent(event.id);
   const myOutcomeLabel = event.outcomes.find((o) => o.id === event.myOutcomeId)?.label ?? null;
 
@@ -95,39 +103,94 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
         </section>
       )}
 
-      {/* ── Dağılım ── */}
+      {/* ── Dağılım ────────────────────────────────────────────────────────
+          ÖNCE SEN SÖYLE. Bu bölüm daha önce dağılımı HERKESE gösteriyordu ve
+          tek kişilik bir etkinlikte "%100" yazıyordu — ürünün iki kuralını
+          birden çiğniyordu. Artık tek karar noktası consensusService'tir. */}
       <section className="mt-6">
         <h2 className="text-ink mb-3 text-base font-bold">Kalabalık ne diyor?</h2>
-        {event.predictionCount === 0 ? (
+
+        {consensus.total === 0 ? (
           <p className="border-border rounded-xl border border-dashed p-6 text-center text-sm">
             Henüz kimse tahmin yapmadı. İlk sen ol.
           </p>
+        ) : !consensus.revealed ? (
+          <p className="border-border rounded-xl border border-dashed p-6 text-center text-sm">
+            {formatCount(consensus.total)} kişi tahmin yaptı.
+            <br />
+            <span aria-hidden="true">🔒 </span>
+            Dağılımı görmek için önce tarafını seç.
+          </p>
+        ) : consensus.shares === null ? (
+          /* Eşik altında YÜZDE DEĞİL KESİR. "%100" arkasında tek kişi varken
+             teknik olarak doğru, iletişim olarak sahtedir: yüzde işareti bir
+             kalabalık ima eder. "1 kişiden 1'i" ise hem dürüst hem daha çok
+             bilgi taşır — örneklemi saklamaz, söyler. */
+          <ul className="space-y-2">
+            {event.outcomes.map((o) => {
+              const count = consensus.counts.find((c) => c.outcomeId === o.id)?.count ?? 0;
+              return (
+                <li key={o.id} className="border-border rounded-lg border px-3 py-3">
+                  <div className="flex items-baseline justify-between text-sm">
+                    <span className="text-ink font-medium">
+                      {o.label}
+                      {o.id === event.myOutcomeId && (
+                        <span className="text-brand ml-2 text-xs">senin tahminin</span>
+                      )}
+                    </span>
+                    <span className="text-ink font-bold">
+                      {count === 0
+                        ? '—'
+                        : `${formatCount(consensus.total)} kişiden ${formatCount(count)}'i`}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+            <li className="text-muted px-1 pt-1 text-xs">
+              Yüzde, yeterli tahmin toplandığında gösterilir. Küçük sayıda yüzde yanıltır.
+            </li>
+          </ul>
         ) : (
           <ul className="space-y-2">
-            {event.outcomes.map((o) => (
-              <li key={o.id} className="border-border rounded-lg border px-3 py-3">
-                <div className="flex items-baseline justify-between text-sm">
-                  <span className="text-ink font-medium">
-                    {o.label}
-                    {o.id === event.myOutcomeId && (
-                      <span className="text-brand ml-2 text-xs">senin tahminin</span>
-                    )}
-                  </span>
-                  <span className="text-ink font-bold">{formatPercent(o.share)}</span>
-                </div>
-                <div
-                  className="bg-surface mt-2 h-2 w-full overflow-hidden rounded-full"
-                  role="img"
-                  aria-label={`${o.label}: ${formatPercent(o.share)}`}
-                >
+            {event.outcomes.map((o) => {
+              const share = (consensus.shares ?? []).find((x) => x.outcomeId === o.id)?.share ?? 0;
+              return (
+                <li key={o.id} className="border-border rounded-lg border px-3 py-3">
+                  <div className="flex items-baseline justify-between text-sm">
+                    <span className="text-ink font-medium">
+                      {o.label}
+                      {o.id === event.myOutcomeId && (
+                        <span className="text-brand ml-2 text-xs">senin tahminin</span>
+                      )}
+                    </span>
+                    <span className="text-ink font-bold">{formatPercent(share)}</span>
+                  </div>
                   <div
-                    className="bg-brand h-full rounded-full"
-                    style={{ width: `${Math.round(o.share * 100)}%` }}
-                  />
-                </div>
-              </li>
-            ))}
+                    className="bg-surface mt-2 h-2 w-full overflow-hidden rounded-full"
+                    role="img"
+                    aria-label={`${o.label}: ${formatPercent(share)}`}
+                  >
+                    <div
+                      className="bg-brand h-full rounded-full"
+                      style={{ width: `${Math.round(share * 100)}%` }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
+        )}
+
+        {consensus.revealed && consensus.position === 'MINORITY' && (
+          <p className="text-ink mt-3 text-sm font-semibold">
+            <span aria-hidden="true">🐺 </span>Azınlıktasın.
+          </p>
+        )}
+        {consensus.revealed && consensus.position === 'MAJORITY' && (
+          <p className="text-ink mt-3 text-sm font-semibold">
+            <span aria-hidden="true">👥 </span>Çoğunluktasın.
+          </p>
         )}
       </section>
 
