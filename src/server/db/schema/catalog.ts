@@ -1,5 +1,6 @@
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -57,6 +58,16 @@ export const resolutionSource = pgEnum('resolution_source', [
 ]);
 
 export const recurrence = pgEnum('recurrence', ['DAILY', 'WEEKDAYS', 'WEEKLY', 'MONTHLY']);
+
+/**
+ * Günün Meydanı — öne çıkarma türü (Faz 8).
+ *
+ * DAILY_PRIMARY bir takvim gününde YALNIZCA BİR TANE olabilir; kural kısmi
+ * tekil index ile veritabanında zorlanır (bkz. drizzle/0013). Uygulama
+ * katmanına bırakılsaydı, iki yönetici aynı anda seçtiğinde ya da bir betik
+ * ikinci kez çalıştığında sessizce iki "günün maçı" oluşurdu.
+ */
+export const featuredType = pgEnum('featured_type', ['DAILY_PRIMARY', 'DAILY_SECONDARY']);
 
 export const categories = pgTable(
   'category',
@@ -117,6 +128,31 @@ export const events = pgTable(
     templateId: text('template_id'),
     occurrenceKey: varchar('occurrence_key', { length: 20 }),
 
+    /**
+     * GÜNÜN MEYDANI (Faz 8).
+     *
+     * `featuredDate` bir TAKVİM GÜNÜDÜR, zaman damgası değil: "9 Eylül'ün
+     * Meydanı" sorusu saat diliminden bağımsız tek bir gün olmalıdır.
+     * Hangi güne düştüğü tek merkezden (config/time.ts) hesaplanır.
+     */
+    featuredType: featuredType('featured_type'),
+    featuredDate: date('featured_date'),
+
+    /**
+     * KAPANIŞTA DONDURULAN KONSENSÜS.
+     *
+     * NEDEN SAKLANIYOR: "topluluğun yalnızca %18'i seninle aynı taraftaydı"
+     * ifadesi, tahminin yapıldığı andaki gerçeği anlatır. Bu değer canlı
+     * sorguyla üretilirse, sonuç açıklandıktan sonra insanlar tahmin
+     * yapmayı bıraktıkça ya da veriler değiştikçe GEÇMİŞ KART DEĞİŞİR.
+     * Paylaşılmış bir "ben demiştim" kartının sonradan başka bir yüzde
+     * göstermesi, ürünün bütün güven vaadini çürütür.
+     *
+     * Biçim: { outcomeId: adet } + toplam. Kapanış anında bir kez yazılır.
+     */
+    consensusFrozenAt: timestamp('consensus_frozen_at', { withTimezone: true }),
+    consensusSnapshot: jsonb('consensus_snapshot').$type<ConsensusSnapshot>(),
+
     createdById: text('created_by_id').references(() => users.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -126,8 +162,22 @@ export const events = pgTable(
     index('event_status_closes_idx').on(t.status, t.closesAt),
     index('event_category_status_idx').on(t.categoryId, t.status),
     index('event_resolves_idx').on(t.resolvesAt, t.status),
+    index('event_featured_idx').on(t.featuredDate, t.featuredType),
   ],
 );
+
+/**
+ * Dondurulmuş konsensüs kaydı.
+ *
+ * `counts` yalnızca GERÇEK ve GEÇERLİ tahminleri sayar: misafir seçimleri,
+ * sistem/yönetici test hesapları ve geçersiz sayılmış tahminler dışarıdadır.
+ * `total` ayrıca tutulur çünkü düşük örneklem koruması toplam sayıya bakar:
+ * üç kişilik bir etkinlikte yüzde göstermek sahte sosyal kanıttır.
+ */
+export type ConsensusSnapshot = {
+  readonly counts: Readonly<Record<string, number>>;
+  readonly total: number;
+};
 
 export const eventOutcomes = pgTable(
   'event_outcome',
