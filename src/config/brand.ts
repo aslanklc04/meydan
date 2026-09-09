@@ -26,6 +26,18 @@
  */
 const configuredAppName = process.env.NEXT_PUBLIC_APP_NAME?.trim();
 
+/**
+ * Yasal sayfalardaki iletişim adresi.
+ *
+ * Ortam değişkeninden gelir çünkü BU ADRESİN GERÇEKTEN OKUNUYOR OLMASI
+ * gerekir: gizlilik politikasında yazan ama kimsenin bakmadığı bir kutu,
+ * kullanıcıya "bize ulaşabilirsin" demenin boş hâlidir.
+ *
+ * Tanımlı değilse yasal sayfalar adres yerine "eklenecek" der — uydurma bir
+ * adres göstermez.
+ */
+export const legalContactEmail = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || null;
+
 export const brand = {
   appName: configuredAppName ? configuredAppName : 'MEYDAN',
   tagline: 'Tahminini ortaya koy.',
