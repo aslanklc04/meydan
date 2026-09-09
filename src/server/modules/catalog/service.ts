@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { db, withTransaction, type Tx } from '@/server/db';
 import { categories, eventOutcomes, events, predictions } from '@/server/db/schema';
 import { BusinessRuleError, NotFoundError } from '@/server/errors';
+import { consensusService } from './consensus.service';
 
 /**
  * Catalog use-case servisi — etkinlik okuma ve yönetimi.
@@ -378,6 +379,19 @@ export const catalogService = {
         .update(events)
         .set({ status: 'CLOSED', updatedAt: new Date() })
         .where(and(eq(events.id, eventId), eq(events.status, 'OPEN')));
+
+      /*
+       * KONSENSÜSÜ DONDUR (Faz 8).
+       *
+       * Burada yapılır, bakım işinde DEĞİL: etkinlik hangi yoldan kapanırsa
+       * kapansın (zamanlayıcı, yöneticinin elle kapatması, fikstür servisi)
+       * kapanış anındaki dağılım kaydedilmiş olur. Yalnızca bakım işine
+       * konsaydı, elle kapatılan bir etkinliğin geçmişi hiç donmazdı ve
+       * "topluluğun %18'i" ifadesi o etkinlikte sonsuza kadar oynardı.
+       *
+       * `freeze` kendi içinde idempotenttir; ikinci çağrı geçmişi ezmez.
+       */
+      await consensusService.freeze(eventId, tx);
     };
 
     if (ctx) return run(ctx);
