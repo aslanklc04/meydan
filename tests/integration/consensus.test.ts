@@ -131,6 +131,16 @@ describe('düşük örneklem koruması', () => {
 });
 
 describe('azınlık / çoğunluk', () => {
+  it('konum eşiğinin ALTINDA taraf yorumu YAPILMAZ', async () => {
+    // Yüzde eşiğini geçiyor ama konum eşiğini geçmiyor: sayı gösterilir,
+    // "azınlıktasın" iddiası gösterilmez.
+    const { eventId, byKey } = await seedEvent({ HOME: 10, AWAY: 2 });
+    const view = await consensusService.view(eventId, byKey.AWAY!);
+    if (!view.revealed) throw new Error('açılmalıydı');
+    expect(view.shares).not.toBeNull();
+    expect(view.position).toBeNull();
+  });
+
   it('azınlıktaki kullanıcıyı AZINLIK olarak işaretler', async () => {
     const { eventId, byKey } = await seedEvent({ HOME: 45, AWAY: 5 });
     const view = await consensusService.view(eventId, byKey.AWAY!);
@@ -253,5 +263,17 @@ describe('kapanış konsensüsü dondurur', () => {
     const view = await consensusService.view(eventId, byKey.AWAY!);
     if (!view.revealed) throw new Error('açılmalıydı');
     expect(view.frozen).toBe(true);
+  });
+});
+
+describe('seçenek sırası', () => {
+  it('ev sahibi, beraberlik, deplasman SIRASIYLA döner', async () => {
+    const { eventId } = await seedEvent({ HOME: 1 });
+
+    // Canlıda görülen hata: başlık "PSV — Shakhtar" derken düğmeler
+    // "Beraberlik / Shakhtar / PSV" sırasıyla çıkıyordu. Sıralama
+    // istenmediği için PostgreSQL satırları keyfi sırada döndürüyordu.
+    const outcomes = await consensusService.outcomesOf(eventId);
+    expect(outcomes.map((o) => o.key)).toEqual(['HOME', 'DRAW', 'AWAY']);
   });
 });
