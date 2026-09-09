@@ -22,6 +22,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = [
     { url: `${base}/`, changeFrequency: 'daily', priority: 1 },
     { url: `${base}/tahmin-gucu`, changeFrequency: 'monthly', priority: 0.5 },
+    // Yasal sayfalar da kalıcı ve herkese açık içeriktir; kayıt olmadan
+    // okunabilmeleri gerekir.
+    { url: `${base}/legal/terms`, changeFrequency: 'yearly' as const, priority: 0.3 },
+    { url: `${base}/legal/privacy`, changeFrequency: 'yearly' as const, priority: 0.3 },
   ];
 
   try {
