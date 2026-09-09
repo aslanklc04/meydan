@@ -13,24 +13,39 @@
  * ürünün yeni olduğunu söyler, yalan söylemez.
  *
  * ── SAYILARIN GEREKÇESİ ────────────────────────────────────────────────────
- * 30, yüzdenin tek bir kişinin gelmesiyle belirgin biçimde oynamadığı ilk
- * makul eşiktir: 30 kişide bir kişi %3,3 puan değiştirir, 10 kişide %10.
- * Yalnız Kurt eşiği daha yüksektir çünkü kalıcı bir başarı rozetidir;
- * hafifçe kalabalık bir etkinlikte azınlıkta kalmak nadir bir başarı değildir.
+ * Eşikler ürünün GERÇEK ölçeğine göre seçildi, ideal ölçeğine göre değil.
+ * İlk sürümde yüzde eşiği 30'du; oysa ilk beta 10-20 kişilik olacak ve o
+ * eşikte yüzde hiç görünmezdi — mekanik, tam da test edileceği dönemde ölü
+ * kalırdı. Eşik altında veri gizlenmiyor, kesir olarak gösteriliyor.
+ *
+ * Yalnız Kurt eşiği en yüksektir çünkü KALICI bir rozettir: az katılımlı bir
+ * etkinlikte azınlıkta kalmak nadir bir başarı değildir ve rozet dağıtıldıkça
+ * değersizleşir.
  */
 
 export const socialProof = {
   /**
-   * Yüzde göstermek için gereken en az tahmin sayısı. Altında yalnızca
-   * katılımcı sayısı gösterilir.
+   * Yüzde göstermek için gereken en az tahmin sayısı.
+   *
+   * ALTINDA VERİ GİZLENMEZ, BİÇİMİ DEĞİŞİR: "%67" yerine "3 kişiden 2'si"
+   * yazılır. Kesir hem dürüsttür hem daha çok bilgi taşır — yüzde örneklem
+   * büyüklüğünü saklar, kesir söyler. Böylece mekanik HER ÖLÇEKTE çalışır;
+   * yalnızca ifade küçük sayıda yanıltmayacak hâle gelir.
+   *
+   * NEDEN 30 DEĞİL 10: ilk sürümde 30'du. Oysa ilk beta 10-20 kişiyle
+   * yapılacak ve etkinlik başına belki 6-8 tahmin gelecek. 30 eşiğinde
+   * yüzde HİÇ görünmez, yani ürünün imza mekaniği tam da test edileceği
+   * dönemde hiç çalışmaz. Eşik, ürünün gerçek ölçeğine göre seçilmeli.
    */
-  minSampleForPercentage: 30,
+  minSampleForPercentage: 10,
 
   /**
-   * "Azınlıktasın / çoğunluktasın" bağlamı için gereken en az tahmin sayısı.
-   * Yüzde eşiğiyle aynıdır — ikisi de aynı iddianın farklı kılığıdır.
+   * "Azınlıktasın / çoğunluktasın" için gereken en az tahmin sayısı.
+   *
+   * Yüzde eşiğinden YÜKSEK: bu bir iddiadır, sayı değil. Beş kişilik bir
+   * etkinlikte "azınlıktasın" demek, azınlık kavramını değersizleştirir.
    */
-  minSampleForPosition: 30,
+  minSampleForPosition: 20,
 
   /** Kullanıcının tarafı bu payın altındaysa "azınlıkta" sayılır. */
   minorityThreshold: 0.35,
