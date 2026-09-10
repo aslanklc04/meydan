@@ -8,6 +8,7 @@ import { formatCount } from '@/lib/utils';
 import { DailyMeydan } from '@/features/daily/components/DailyMeydan';
 import { gazetteService } from '@/server/modules/gazette/service';
 import { Shelf } from '@/features/gazette/components/Shelf';
+import { ResultRow } from '@/features/results/components/ResultRow';
 import { timeRemaining } from '@/features/predictions/labels';
 
 /**
@@ -84,10 +85,22 @@ export default async function Home() {
    * (merak) → tutanlar (kanıt). Sonuncusu en sondadır çünkü ancak sonuçlar
    * biriktiğinde dolacak.
    */
-  const [todayRaw, resolvingRaw, hitsRaw] = await Promise.all([
+  const [todayRaw, resolvingRaw, hitsRaw, results] = await Promise.all([
     gazetteService.shelfToday(),
     gazetteService.shelfResolvingToday(),
     gazetteService.shelfHits(6),
+    /*
+     * SON SONUÇLAR — ürünün tek dış kanıtı.
+     *
+     * Ana sayfa buraya kadar yalnızca GELECEĞİ gösteriyordu: bugün açık
+     * olanlar, bugün sınanacak kapaklar. Ziyaretçinin "bu site gerçekten
+     * çalışıyor mu" sorusuna cevap veren tek şey ise geçmiştir — dün ne
+     * olduğunu bilen bir liste.
+     *
+     * Burada yalnızca ilk birkaç satır durur; tamamı /sonuclar'da. Ana
+     * sayfanın işi arşiv olmak değil, kanıtın var olduğunu göstermek.
+     */
+    catalogService.resultsBoard(7, 4),
   ]);
 
   /*
@@ -201,6 +214,34 @@ export default async function Home() {
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {/* ── Son sonuçlar ────────────────────────────────────────────────── */}
+      {results.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-ink text-lg font-bold">
+            <span aria-hidden="true">🏁 </span>
+            Sonuçlandı
+          </h2>
+          <p className="text-muted mt-1 text-sm">
+            Biten meydanlar ve kaç kişinin bildiği. Kimin bildiği yazmaz.
+          </p>
+
+          <ul className="mt-4 space-y-2">
+            {results.map((r) => (
+              <ResultRow key={r.id} data={r} />
+            ))}
+          </ul>
+
+          <p className="mt-3">
+            <Link
+              href="/sonuclar"
+              className="text-brand focus-visible:outline-ink text-sm font-semibold underline underline-offset-4 focus-visible:outline-2"
+            >
+              Son 7 günün tüm sonuçları →
+            </Link>
+          </p>
         </section>
       )}
 
