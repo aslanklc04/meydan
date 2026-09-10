@@ -38,7 +38,7 @@ export type EventCardData = {
   readonly closesAt: string;
   readonly predictionCount: number;
   readonly challengeCount: number;
-  readonly outcomes: readonly { id: string; label: string }[];
+  readonly outcomes: readonly { id: string; label: string; imageUrl?: string | null }[];
   readonly myOutcomeId: string | null;
   readonly myOutcomeLabel: string | null;
 };
@@ -174,6 +174,28 @@ export function EventCard({
                 >
                   {/* Renk tek başına anlam taşımaz: seçili olan işaretle de belli edilir. */}
                   <span aria-hidden="true">{selected ? '✓ ' : ''}</span>
+                  {/*
+                    TAKIM ARMASI — akışta da.
+                    Armalar ana sayfaya ve herkese açık etkinlik sayfasına
+                    eklenmişti; AKIŞA eklenmemişti. Oysa kullanıcı tahminini
+                    burada yapıyor. "Site soğuk, logo yok" gözlemi tam olarak
+                    bu ekran içindi ve düzeltme başka ekranlara gitmişti.
+
+                    Arma yoksa hiçbir şey çizilmez: kırık görsel simgesi, hiç
+                    görsel olmamasından kötüdür.
+                  */}
+                  {outcome.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={outcome.imageUrl}
+                      alt=""
+                      aria-hidden="true"
+                      width={28}
+                      height={28}
+                      loading="lazy"
+                      className="mr-2 inline-block h-7 w-7 shrink-0 object-contain align-middle"
+                    />
+                  )}
                   {outcome.label}
                 </button>
               );
