@@ -99,6 +99,13 @@
       "when": 1788980035924,
       "tag": "0013_faz8_featured",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788984205967,
+      "tag": "0014_outcome_image",
+      "breakpoints": true
     }
   ]
 }
