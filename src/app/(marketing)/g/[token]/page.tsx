@@ -6,6 +6,8 @@ import { currentActor } from '@/server/auth';
 import { gazetteService } from '@/server/modules/gazette/service';
 import type { GazetteHeadline } from '@/server/modules/gazette/service';
 import { log } from '@/server/observability/logger';
+import { ShareBar } from '@/features/gazette/components/ShareBar';
+import { serverEnv } from '@/config/env';
 import { brand } from '@/config';
 import { formatCount } from '@/lib/utils';
 
@@ -141,20 +143,44 @@ export default async function GazettePage({ params }: Params) {
   const actor = await currentActor();
 
   /*
+   * SAHİPLİK, KULLANICI ADIYLA belirlenir — iç kimlikle değil.
+   *
+   * Kullanıcı adları zaten tekildir ve zaten ekranda görünür; bu yüzden
+   * karşılaştırma için sayfaya fazladan hiçbir şey göndermek gerekmez.
+   * `ownerId`'yi buraya taşımak, hiçbir işe yaramayan bir iç kimliği
+   * herkesin okuyabileceği HTML'e koymak olurdu.
+   */
+  const isOwner = actor !== null && actor.username === gazette.ownerUsername;
+
+  /*
    * Sayaç YANITTAN SONRA artırılır. Sayfanın açılması bir veritabanı
    * yazmasını beklememeli: sayaç yanlış sayarsa kimse zarar görmez, sayfa
    * geç açılırsa ziyaretçi gider. Hata da yutulur — bir sayaç yüzünden
    * paylaşılmış bir bağlantı bozulmaz.
+   *
+   * SAHİBİN KENDİ ZİYARETİ SAYILMAZ. Sayılsaydı, kullanıcı kapağını her
+   * yenilediğinde sayı artardı ve "12 kişi baktı" yazısı aslında "12 kez sen
+   * baktın" anlamına gelirdi. Ölçüm olarak değersiz, iletişim olarak yanlış.
    */
-  after(async () => {
-    try {
-      await gazetteService.countView(token);
-    } catch (error) {
-      log.warn('gazette.view_count_failed', { operation: 'gazette.countView', error });
-    }
-  });
+  if (!isOwner) {
+    after(async () => {
+      try {
+        await gazetteService.countView(token);
+      } catch (error) {
+        log.warn('gazette.view_count_failed', { operation: 'gazette.countView', error });
+      }
+    });
+  }
 
   const pending = gazette.headlines.filter((h) => h.correct === null && !h.voided).length;
+
+  /*
+   * Paylaşılan adres MUTLAK olmalı. Göreli bir `/g/...` WhatsApp'a
+   * yapıştırıldığında bağlantı olmaz, düz metin olur. Alan adı sunucudan
+   * okunur; istemcideki `window.location` kullanılsaydı sayfa ilk çizimde
+   * adresi bilemez ve düğme boş bir bağlantı paylaşırdı.
+   */
+  const shareUrl = `${serverEnv.APP_URL.replace(/\/$/, '')}/g/${token}`;
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-8">
@@ -219,10 +245,26 @@ export default async function GazettePage({ params }: Params) {
         </footer>
       </article>
 
-      {/* ── Ziyaretçiye çağrı ── */}
-      <section className="border-border bg-surface mt-6 rounded-xl border p-5 text-center">
-        {actor ? (
+      {/* ── Çağrı — kim baktığına göre değişir ─────────────────────────────
+          SAHİBİNE "gazeteni kur" DEMEK YANLIŞTI. Kullanıcı kapağını yeni
+          kurmuş, ekranda ona bakıyor ve ürün ondan kurmasını istiyordu.
+          Sahibin bu ekranda ihtiyacı olan tek şey PAYLAŞMAK. */}
+      <section className="border-border bg-surface mt-6 rounded-xl border p-5">
+        {isOwner ? (
           <>
+            <p className="text-ink text-center text-base font-bold">Gazeten hazır.</p>
+            <p className="text-muted mt-1 mb-4 text-center text-sm">
+              Bağlantıyı paylaş. Bakan kişi sonucu görmek için geri gelir.
+            </p>
+            <ShareBar url={shareUrl} title={gazette.title} username={gazette.ownerUsername} />
+            <p className="text-muted mt-4 text-center text-xs">
+              {gazette.viewCount === 0
+                ? 'Henüz kimse bakmadı. Senin kendi ziyaretlerin sayılmıyor.'
+                : `${formatCount(gazette.viewCount)} kez görüntülendi (senin ziyaretlerin hariç).`}
+            </p>
+          </>
+        ) : actor ? (
+          <div className="text-center">
             <p className="text-ink text-base font-bold">Sıra sende.</p>
             <p className="text-muted mt-1 text-sm">
               Kendi manşetlerini seç, kapağını kur ve paylaş.
@@ -233,9 +275,9 @@ export default async function GazettePage({ params }: Params) {
             >
               Gazeteni kur
             </Link>
-          </>
+          </div>
         ) : (
-          <>
+          <div className="text-center">
             <p className="text-ink text-base font-bold">Sen ne diyorsun?</p>
             <p className="text-muted mt-1 text-sm">
               Katıl, tahminini yap ve sonucu birlikte görelim. Gerçek para yok.
@@ -259,7 +301,7 @@ export default async function GazettePage({ params }: Params) {
                 Giriş yap
               </Link>
             </p>
-          </>
+          </div>
         )}
       </section>
     </main>
