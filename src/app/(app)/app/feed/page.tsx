@@ -124,6 +124,7 @@ export default async function FeedPage({
                   eventQuestion: c.eventQuestion,
                   creatorOutcomeLabel: c.creatorOutcomeLabel,
                   yourOutcomeLabel: c.opponentOutcomeLabel,
+                  options: c.options,
                   stakeAmount: c.stakeAmount,
                   expiresAt: c.expiresAt.toISOString(),
                 }}
@@ -201,6 +202,7 @@ export default async function FeedPage({
                   eventQuestion: c.eventQuestion,
                   creatorOutcomeLabel: c.creatorOutcomeLabel,
                   yourOutcomeLabel: c.opponentOutcomeLabel,
+                  options: c.options,
                   stakeAmount: c.stakeAmount,
                   expiresAt: c.expiresAt.toISOString(),
                 }}
