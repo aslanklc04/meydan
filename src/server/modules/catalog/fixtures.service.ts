@@ -90,9 +90,57 @@ const SLUG_PREFIX = 'mac-';
 
 /**
  * Bir koşuda tek tek sorgulanacak en fazla gecikmiş maç.
- * 7 lig × 2 + 5 = 19 istek; ücretsiz katmanın dakikada 30 sınırının altında.
  */
 const MAX_STRAGGLER_LOOKUPS = 5;
+
+/**
+ * ── NEDEN "YAKLAŞANLAR" UCU YETMİYOR ───────────────────────────────────────
+ *
+ * `eventsnextleague.php` ücretsiz anahtarla lig başına YALNIZCA 1 maç
+ * döndürüyor. Ölçüldü: Süper Lig → 1 maç, Premier Lig → 1 maç. Yani yedi lig
+ * = yedi maç, hepsi bu. Kurucunun "çok az maç geliyor" gözlemi kodun arızası
+ * değil, ucun sınırıydı.
+ *
+ * Denenen ve ELENEN diğer uçlar:
+ *   • `eventsseason.php`  → ücretsiz anahtarla 15 satırda kesiliyor ve
+ *                           sezonun BAŞINDAN veriyor; hepsi geçmiş maçlar.
+ *   • `eventsday.php`     → tüm dünya için günde 3 satır döndürdü.
+ *
+ * ÇALIŞAN YOL: `eventsround.php` bir HAFTANIN tamamını veriyor — Süper Lig
+ * 5. hafta için 9 maç. Hangi haftada olduğumuzu da "yaklaşanlar" ucundaki tek
+ * maçın `intRound` alanı söylüyor. Yani: 1 istekle hafta numarasını öğren,
+ * 1 istekle o haftanın tamamını al.
+ */
+const ROUNDS_AHEAD = 2;
+
+/**
+ * ── SAATLER NEDEN TEK TEK SORULUYOR ────────────────────────────────────────
+ *
+ * `eventsround.php` maç saatlerini YER TUTUCU olarak veriyor. Ölçüldü: aynı
+ * maç (2527760) için hafta ucu "13 Eylül 12:00", tekil sorgu ve yaklaşanlar
+ * ucu ise "11 Eylül 17:00" diyor — iki kaynak birbirini doğruluyor, hafta ucu
+ * yanılıyor.
+ *
+ * Bu fark önemsiz değil: kapanış saati maçın başlangıcıdır. Yanlış saatle
+ * açılan bir etkinlik ya maç başladıktan sonra tahmin almaya devam eder (ki
+ * bu yarışı bozar) ya da maçtan iki gün önce kapanır.
+ *
+ * Bu yüzden hafta ucu yalnızca KEŞİF için kullanılır; her yeni maçın saati
+ * `lookupevent.php` ile tek tek doğrulanır.
+ */
+const MAX_NEW_PER_RUN = 12;
+
+/**
+ * Bir koşuda yapılacak en fazla istek.
+ *
+ * Ücretsiz katman dakikada 30 istek veriyor. Bütçe: 7 lig × (1 yaklaşan +
+ * 2 hafta) = 21, üstüne en fazla 12 saat doğrulaması ve 7 biten-maç sorgusu
+ * — toplam sınırı aşar. Bu yüzden koşu bütçeyle sınırlanır ve KALDIĞI YERDEN
+ * DEĞİL, her seferinde eksik olanla devam eder: katalog birkaç koşuda dolar.
+ * Bir koşuda her şeyi almaya çalışmak, sağlayıcının kapıyı yüzümüze
+ * kapatmasıyla biter.
+ */
+const MAX_API_CALLS_PER_RUN = 26;
 
 /** Maçın bittiğini kabul ettiğimiz durumlar. */
 const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN', 'Match Finished', 'FINISHED']);
@@ -130,6 +178,8 @@ type ApiEvent = {
   readonly intAwayScore?: string | null;
   readonly strHomeTeamBadge?: string | null;
   readonly strAwayTeamBadge?: string | null;
+  readonly intRound?: string | null;
+  readonly strSeason?: string | null;
 };
 
 /**
@@ -295,9 +345,94 @@ function decide(event: ApiEvent): FixtureDecision {
   return { action: 'resolve', key: home > away ? 'HOME' : away > home ? 'AWAY' : 'DRAW' };
 }
 
+/**
+ * Bir maçtan etkinlik açar. Zaten varsa yalnızca eksik armaları tamamlar.
+ *
+ * `event` TEKİL SORGUDAN gelmelidir: hafta ucunun saatleri yer tutucudur ve
+ * kapanış saati yanlış olursa etkinlik ya maç başladıktan sonra tahmin
+ * almaya devam eder ya da maçtan iki gün önce kapanır.
+ */
+async function upsertFixture(
+  event: ApiEvent,
+  owner: string,
+): Promise<'imported' | 'existed' | 'skipped'> {
+  const home = teamName(event.strHomeTeam);
+  const away = teamName(event.strAwayTeam);
+  const kickoff = kickoffAt(event);
+  const id = event.idEvent?.trim();
+
+  // Takım adı, kimlik ya da geçerli saat yoksa etkinlik AÇILMAZ:
+  // cevaplanamayan soru üretmemek bu modülün varlık sebebidir.
+  if (!id || !home || !away || !kickoff || kickoff <= new Date()) return 'skipped';
+
+  const slug = `${SLUG_PREFIX}${id}`;
+  const existing = await db
+    .select({ id: events.id })
+    .from(events)
+    .where(eq(events.slug, slug))
+    .limit(1);
+
+  if (existing[0]) {
+    /*
+     * ── ESKİ ETKİNLİKLERE ARMA TAMAMLAMA ────────────────────────────────
+     *
+     * Arma alanı sonradan eklendi. Bu satır olmadan, alan eklenmeden ÖNCE
+     * içeri alınmış maçlar ömür boyu armasız kalırdı: içeri alma işi
+     * onları "zaten var" diye atlıyor ve bir daha hiç dokunmuyordu.
+     * Canlıda tam olarak bu görüldü.
+     *
+     * YALNIZCA BOŞ OLANI DOLDURUR. Var olan armanın üstüne yazılmaz;
+     * etiketler, saatler ve başka hiçbir alan değiştirilmez. Bir tamamlama
+     * işi, bir güncelleme işine dönüşmemelidir: kullanıcının gördüğü
+     * etiketin altından değişmesi, tahminini neye göre yaptığını
+     * belirsizleştirir.
+     */
+    await backfillBadges(existing[0].id, {
+      HOME: badgeUrl(event.strHomeTeamBadge),
+      AWAY: badgeUrl(event.strAwayTeamBadge),
+    });
+    return 'existed';
+  }
+
+  await catalogService.createEvent({
+    categorySlug: 'spor',
+    title: `${home} — ${away}`,
+    question: 'Bu maçı kim kazanacak?',
+    slug,
+    // Tahminler ilk düdükte kapanır: maç başladıktan sonra tahmin alınması
+    // yarışı bozar.
+    closesAt: kickoff,
+    resolvesAt: new Date(kickoff.getTime() + 2.5 * 3600_000),
+    outcomes: [
+      { key: 'HOME', label: home, imageUrl: badgeUrl(event.strHomeTeamBadge) },
+      { key: 'DRAW', label: 'Beraberlik' },
+      { key: 'AWAY', label: away, imageUrl: badgeUrl(event.strAwayTeamBadge) },
+    ],
+    createdById: owner,
+    status: 'OPEN',
+  });
+  return 'imported';
+}
+
 export const fixturesService = {
   /**
-   * Yaklaşan maçları etkinliğe çevirir — lig başına tek istek.
+   * Yaklaşan maçları etkinliğe çevirir.
+   *
+   * ── ÜÇ ADIM ────────────────────────────────────────────────────────────
+   * 1. Lig başına "yaklaşanlar" ucu: tek maç döner ama HANGİ HAFTADA
+   *    olduğumuzu söyler (`intRound`) ve saati doğrudur.
+   * 2. O hafta ve bir sonraki hafta için "hafta" ucu: haftanın tamamı
+   *    (Süper Lig'de 9 maç). Buradan yalnızca KİMLİKLER alınır.
+   * 3. Sistemde olmayan her kimlik tek tek sorgulanır — saati oradan gelir.
+   *
+   * Neden böyle: ölçüldü, "yaklaşanlar" ucu ücretsiz anahtarla lig başına
+   * yalnızca 1 maç veriyor. Yedi lig = yedi maç. Hafta ucu ise haftanın
+   * tamamını veriyor ama saatleri yer tutucu. İkisi birlikte hem sayıyı hem
+   * doğruluğu sağlıyor.
+   *
+   * İSTEK BÜTÇESİ: bir koşuda en fazla `MAX_API_CALLS_PER_RUN` istek. Bütçe
+   * dolunca koşu durur; katalog birkaç koşuda dolar. Bir koşuda her şeyi
+   * almaya çalışmak, sağlayıcının kapıyı kapatmasıyla biter.
    */
   async importUpcoming(): Promise<{ imported: number; skipped: number }> {
     const owner = await adminId();
@@ -308,74 +443,96 @@ export const fixturesService = {
 
     let imported = 0;
     let skipped = 0;
+    let calls = 0;
+    let created = 0;
+
+    /** Bu koşuda görülen, sistemde OLMAYAN maç kimlikleri. */
+    const discovered = new Map<string, ApiEvent>();
 
     for (const league of leagues()) {
-      const data = await callApi(`/eventsnextleague.php?id=${league}`);
-      for (const event of data?.events ?? []) {
-        const home = teamName(event.strHomeTeam);
-        const away = teamName(event.strAwayTeam);
-        const kickoff = kickoffAt(event);
-        const id = event.idEvent?.trim();
+      if (calls >= MAX_API_CALLS_PER_RUN) break;
 
-        // Takım adı, kimlik ya da geçerli saat yoksa etkinlik AÇILMAZ:
-        // cevaplanamayan soru üretmemek bu modülün varlık sebebidir.
-        if (!id || !home || !away || !kickoff || kickoff <= new Date()) {
-          skipped += 1;
-          continue;
+      // ── 1. Hangi haftadayız ───────────────────────────────────────────
+      calls += 1;
+      const next = await callApi(`/eventsnextleague.php?id=${league}`);
+      const upcoming = next?.events ?? [];
+      const anchor = upcoming[0];
+      if (!anchor) continue;
+
+      /*
+       * Bu uçtan gelen maçların saatleri DOĞRUDUR, o yüzden hepsi hemen
+       * işlenir — yalnızca ilki değil.
+       *
+       * Ücretsiz anahtarla bu liste bugün tek satır dönüyor; ama ücretli bir
+       * anahtar alınırsa 15 satır dönecek ve o zaman "yalnızca ilkini al"
+       * demek, doğru saatli on dört maçı çöpe atmak olurdu. Kod, kaynağın
+       * bugünkü cimriliğine göre değil verdiği şeye göre yazılır.
+       */
+      for (const event of upcoming) {
+        const outcome = await upsertFixture(event, owner);
+        if (outcome === 'imported') imported += 1;
+        else skipped += 1;
+      }
+
+      const round = Number(anchor.intRound);
+      const season = anchor.strSeason?.trim();
+      // Sezon ve hafta numarası TAHMİN EDİLMEZ. Sağlayıcı vermiyorsa bu lig
+      // için hafta keşfi yapılmaz; uydurulan bir sezon dizgisi boş yanıt
+      // döndürür ve bütçeyi boşa harcar.
+      if (!season || !Number.isInteger(round) || round <= 0) continue;
+
+      // ── 2. Haftanın tamamı ────────────────────────────────────────────
+      for (let r = round; r < round + ROUNDS_AHEAD; r++) {
+        if (calls >= MAX_API_CALLS_PER_RUN) break;
+        calls += 1;
+        const roundData = await callApi(
+          `/eventsround.php?id=${league}&r=${r}&s=${encodeURIComponent(season)}`,
+        );
+        for (const event of roundData?.events ?? []) {
+          const id = event.idEvent?.trim();
+          if (!id || discovered.has(id)) continue;
+          discovered.set(id, event);
         }
-
-        const slug = `${SLUG_PREFIX}${id}`;
-        const existing = await db
-          .select({ id: events.id })
-          .from(events)
-          .where(eq(events.slug, slug))
-          .limit(1);
-        if (existing[0]) {
-          /*
-           * ── ESKİ ETKİNLİKLERE ARMA TAMAMLAMA ────────────────────────────
-           *
-           * Arma alanı sonradan eklendi. Bu satır olmadan, alan eklenmeden
-           * ÖNCE içeri alınmış maçlar ömür boyu armasız kalırdı: içeri alma
-           * işi onları "zaten var" diye atlıyor ve bir daha hiç dokunmuyordu.
-           * Canlıda tam olarak bu görüldü — Günün Meydanı'ndaki maçın
-           * armaları hiç gelmedi.
-           *
-           * YALNIZCA BOŞ OLANI DOLDURUR. Var olan bir armanın üstüne
-           * yazılmaz; sonuç etiketleri, sıralama ve başka hiçbir alan
-           * değiştirilmez. Bir tamamlama işi, bir güncelleme işine
-           * dönüşmemelidir: kullanıcının gördüğü etiketin altından
-           * değişmesi, tahminini neye göre yaptığını belirsizleştirir.
-           */
-          await backfillBadges(existing[0].id, {
-            HOME: badgeUrl(event.strHomeTeamBadge),
-            AWAY: badgeUrl(event.strAwayTeamBadge),
-          });
-          skipped += 1;
-          continue;
-        }
-
-        await catalogService.createEvent({
-          categorySlug: 'spor',
-          title: `${home} — ${away}`,
-          question: 'Bu maçı kim kazanacak?',
-          slug,
-          // Tahminler ilk düdükte kapanır: maç başladıktan sonra tahmin
-          // alınması yarışı bozar.
-          closesAt: kickoff,
-          resolvesAt: new Date(kickoff.getTime() + 2.5 * 3600_000),
-          outcomes: [
-            { key: 'HOME', label: home, imageUrl: badgeUrl(event.strHomeTeamBadge) },
-            { key: 'DRAW', label: 'Beraberlik' },
-            { key: 'AWAY', label: away, imageUrl: badgeUrl(event.strAwayTeamBadge) },
-          ],
-          createdById: owner,
-          status: 'OPEN',
-        });
-        imported += 1;
       }
     }
 
-    if (imported > 0) log.info('fixtures.imported', { operation: 'fixtures.import', imported });
+    // ── 3. Saatleri tek tek doğrula ──────────────────────────────────────
+    // Sistemde zaten olan maçlar için tekil sorgu YAPILMAZ: bütçe yalnızca
+    // gerçekten yeni olanlara harcanır.
+    for (const [id] of discovered) {
+      if (calls >= MAX_API_CALLS_PER_RUN || created >= MAX_NEW_PER_RUN) break;
+
+      const existing = await db
+        .select({ id: events.id })
+        .from(events)
+        .where(eq(events.slug, `${SLUG_PREFIX}${id}`))
+        .limit(1);
+      if (existing[0]) continue;
+
+      calls += 1;
+      const detail = await callApi(`/lookupevent.php?id=${id}`);
+      const event = detail?.events?.[0];
+      if (!event) {
+        skipped += 1;
+        continue;
+      }
+
+      const outcome = await upsertFixture(event, owner);
+      if (outcome === 'imported') {
+        imported += 1;
+        created += 1;
+      } else {
+        skipped += 1;
+      }
+    }
+
+    log.info('fixtures.imported', {
+      operation: 'fixtures.import',
+      imported,
+      skipped,
+      calls,
+      discovered: discovered.size,
+    });
     return { imported, skipped };
   },
 
