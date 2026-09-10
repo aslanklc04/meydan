@@ -95,9 +95,32 @@ describe('misafir akışı', () => {
 });
 
 describe('paylaşım düğmesi', () => {
+  it('TAHMİNİN YAPILDIĞI YERDE durur — akışta da, etkinlik sayfasında da', () => {
+    /*
+     * Canlıda görülen hata: kutu yalnızca herkese açık etkinlik sayfasındaydı.
+     * İnsanlar tahminlerini AKIŞTA yapıyor ve oradan etkinlik sayfasına
+     * geçmiyorlar; düğme vardı ama görülmüyordu.
+     *
+     * Kart iki yerde de kullanıldığı için, kutunun kartın İÇİNDE olması hem
+     * ikisinde birden görünmesini sağlar hem kopyalanmasını önler.
+     */
+    const card = read('src/features/events/components/EventCard.tsx');
+    expect(card).toContain('<AskAFriend');
+    // Kartın hangi ekranlarda kullanıldığı: ikisi de.
+    expect(read('src/app/(app)/app/feed/page.tsx')).toContain('<EventCard');
+    expect(read('src/app/(marketing)/event/[slug]/page.tsx')).toContain('<EventCard');
+  });
+
   it('yalnızca TAHMİN YAPMIŞ kullanıcıya gösterilir', () => {
+    // Kartta `alreadyPredicted` bloğunun içinde: tahmin yoksa blok çizilmez.
+    const card = read('src/features/events/components/EventCard.tsx');
+    const block = card.slice(card.indexOf('{alreadyPredicted && !stakeStep &&'));
+    expect(block.slice(0, block.indexOf('{/* ── ADIM 1'))).toContain('<AskAFriend');
+  });
+
+  it('etkinlik sayfasında İKİNCİ bir kopya YOK', () => {
     const eventPage = read('src/app/(marketing)/event/[slug]/page.tsx');
-    expect(eventPage).toContain('actor && event.myOutcomeId && event.isOpen');
+    expect(eventPage).not.toContain('AskAFriend');
   });
 
   it('gönderene, alıcının önce kendi cevabını vereceği söyleniyor', () => {
