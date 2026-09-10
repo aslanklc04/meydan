@@ -200,6 +200,19 @@ export const eventOutcomes = pgTable(
      * Zorluk katsayısının temelidir; dondurulmadan geçmiş rating yeniden üretilemez.
      */
     consensusShare: numeric('consensus_share', { precision: 6, scale: 5 }),
+
+    /**
+     * Seçeneğin görseli — maçlarda takım arması (Faz 8).
+     *
+     * NEDEN SEÇENEKTE, ETKİNLİKTE DEĞİL: bir maçta iki farklı arma vardır ve
+     * her biri bir tarafa aittir. Etkinlikte tutulsaydı hangi armanın hangi
+     * düğmeye ait olduğu ayrıca eşleştirilmek zorunda kalırdı. "Beraberlik"
+     * gibi seçeneklerin görseli yoktur ve null kalır.
+     *
+     * Dış adres saklanır, görsel kopyalanmaz: telif ve depolama yükü
+     * alınmaz, sağlayıcı görseli güncellediğinde kendiliğinden güncellenir.
+     */
+    imageUrl: varchar('image_url', { length: 300 }),
   },
   (t) => [
     uniqueIndex('event_outcome_key_unique').on(t.eventId, t.key),
