@@ -204,7 +204,12 @@ export const consensusService = {
    */
   async outcomesOf(eventId: string, ctx: Ctx = db) {
     return ctx
-      .select({ id: eventOutcomes.id, key: eventOutcomes.key, label: eventOutcomes.label })
+      .select({
+        id: eventOutcomes.id,
+        key: eventOutcomes.key,
+        label: eventOutcomes.label,
+        imageUrl: eventOutcomes.imageUrl,
+      })
       .from(eventOutcomes)
       .where(eq(eventOutcomes.eventId, eventId))
       .orderBy(asc(eventOutcomes.sortOrder));
