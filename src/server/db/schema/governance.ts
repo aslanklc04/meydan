@@ -57,6 +57,7 @@ export const auditAction = pgEnum('audit_action', [
   'CHALLENGE_REFUNDED',
   /** İtibarın toplu yeniden hesaplanması (algoritma sürüm geçişi). */
   'RATINGS_RECOMPUTED',
+  'GAZETTE_HIDDEN',
 ]);
 
 /**
