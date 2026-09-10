@@ -738,3 +738,69 @@ describe('raf sıralaması', () => {
     expect(await gazetteService.shelfToday()).toHaveLength(0);
   });
 });
+
+describe('rafta kişi başına sınır', () => {
+  /** Bir kullanıcı için N tane herkese açık kapak kurar. */
+  async function makeCovers(userId: string, count: number, prefix: string) {
+    const tokens: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const e = await makeEvent();
+      const id = await predict(userId, e.eventId, e.byKey.HOME!);
+      const { publicToken } = await gazetteService.create({
+        ownerId: userId,
+        title: `${prefix} kapak ${i}`,
+        predictionIds: [id],
+        isPublic: true,
+      });
+      tokens.push(publicToken);
+    }
+    return tokens;
+  }
+
+  it('TEK KİŞİ rafı dolduramaz', async () => {
+    // Kötü niyet gerekmiyor: hevesli bir kullanıcı da aynı sonucu üretir.
+    const { userId } = await createUser('coskulu');
+    await makeCovers(userId, 8, 'Coşkulu');
+
+    const shelf = await gazetteService.shelfToday();
+    expect(shelf.length).toBeLessThanOrEqual(2);
+  });
+
+  it('sınır kişi BAŞINA — başkalarına yer kalır', async () => {
+    const { userId: a, username: nameA } = await createUser('coskulu');
+    const { userId: b, username: nameB } = await createUser('sakin');
+    await makeCovers(a, 6, 'Coşkulu');
+    await makeCovers(b, 1, 'Sakin');
+
+    const shelf = await gazetteService.shelfToday();
+    const byOwner = shelf.reduce<Record<string, number>>((acc, g) => {
+      acc[g.ownerUsername] = (acc[g.ownerUsername] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    expect(byOwner[nameA]).toBe(2);
+    // Asıl mesele bu: kalabalık kullanıcı, sessiz kullanıcıyı raftan silmiyor.
+    expect(byOwner[nameB]).toBe(1);
+  });
+
+  it('SINIRLANAN ŞEY kapak sayısı DEĞİL, raftaki görünürlük', async () => {
+    // Kullanıcı istediği kadar kapak kurabilmeli ve hepsinin bağlantısı
+    // çalışmalı; kısıtlanan yalnızca ana sayfadaki yer.
+    const { userId } = await createUser('coskulu');
+    const tokens = await makeCovers(userId, 5, 'Coşkulu');
+
+    expect(await gazetteService.listMine(userId)).toHaveLength(5);
+    for (const t of tokens) {
+      expect(await gazetteService.byToken(t)).not.toBeNull();
+    }
+  });
+
+  it('sınır ÜÇ RAFTA da geçerli', async () => {
+    const { userId } = await createUser('coskulu');
+    await makeCovers(userId, 5, 'Coşkulu');
+
+    expect((await gazetteService.shelfToday()).length).toBeLessThanOrEqual(2);
+    expect((await gazetteService.shelfResolvingToday()).length).toBeLessThanOrEqual(2);
+    expect((await gazetteService.shelfHits()).length).toBeLessThanOrEqual(2);
+  });
+});
