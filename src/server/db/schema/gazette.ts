@@ -1,4 +1,13 @@
-import { date, index, integer, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  date,
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { createId } from '@paralleldrive/cuid2';
 import { users } from './identity';
 import { predictions } from './prediction';
@@ -19,6 +28,18 @@ import { predictions } from './prediction';
  * yalnızca paylaşım içindir: rastgele üretilir, tahmin edilemez ve iç
  * kimlikle ilişkisi yoktur.
  */
+/**
+ * Kapağın kimlere görüneceği.
+ *
+ * PRIVATE: yalnızca bağlantıyı bilen görür. Kapak hiçbir listede yer almaz.
+ * PUBLIC:  ayrıca ana sayfadaki raflarda herkese görünür.
+ *
+ * VARSAYILAN PRIVATE'tir. Serbest yazılmış bir metni kullanıcının açık bir
+ * tercihi olmadan herkesin ana sayfasına koymak, ona sormadan adına karar
+ * vermektir; bu tercih onay kutusuyla ve okunur bir cümleyle istenir.
+ */
+export const gazetteVisibility = pgEnum('gazette_visibility', ['PRIVATE', 'PUBLIC']);
+
 export const gazettes = pgTable(
   'gazette',
   {
@@ -55,11 +76,39 @@ export const gazettes = pgTable(
     viewCount: integer('view_count').notNull().default(0),
     signupCount: integer('signup_count').notNull().default(0),
 
+    visibility: gazetteVisibility('visibility').notNull().default('PRIVATE'),
+
+    /**
+     * GÖRÜNÜRLÜK TEK YÖNLÜ BİR MANDALDIR.
+     *
+     * Kullanıcı herkese açık bir kapağı gizleyebilir (fikrini değiştirme,
+     * mahremiyet hakkı) ama geri açamaz. Sebep, manşetin silinemez olmasıyla
+     * aynı: serbest bırakılsaydı kullanıcı kapağını herkese açar, manşetleri
+     * tutmayınca gizler, tutunca yeniden açardı. Raf o zaman gerçeği değil,
+     * herkesin en iyi gününü gösterirdi.
+     *
+     * Bu alan dolduğunda görünürlük PRIVATE'te kilitlenir — kural veritabanı
+     * kısıtıyla uygulanır, koddaki bir `if` ile değil.
+     */
+    madePrivateAt: timestamp('made_private_at', { withTimezone: true }),
+
+    /**
+     * MODERASYON GİZLEMESİ — kullanıcının kendi tercihinden ayrıdır.
+     *
+     * Gizlenen kapak yalnızca raftan değil BAĞLANTIDAN da düşer. Yalnızca
+     * raftan düşseydi gizleme bir gösteriden ibaret olurdu: şikâyet edilen
+     * içerik, paylaşıldığı yerde okunmaya devam ederdi.
+     */
+    hiddenAt: timestamp('hidden_at', { withTimezone: true }),
+    hiddenById: text('hidden_by_id').references(() => users.id),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('gazette_public_token_key').on(t.publicToken),
     index('gazette_owner_idx').on(t.ownerId, t.createdAt.desc()),
+    // Raf sorguları: herkese açık ve gizlenmemiş kapaklar, yeniden eskiye.
+    index('gazette_shelf_idx').on(t.visibility, t.hiddenAt, t.createdAt.desc()),
   ],
 );
 
