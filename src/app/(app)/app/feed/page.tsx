@@ -11,6 +11,7 @@ import { onboardingService } from '@/server/modules/identity/onboarding.service'
 import { gazetteService } from '@/server/modules/gazette/service';
 import { predictionService } from '@/server/modules/prediction/service';
 import { ResultCard } from '@/features/share/components/ResultCard';
+import { ResultRow } from '@/features/results/components/ResultRow';
 import { EventCard } from '@/features/events/components/EventCard';
 import { ChallengeCard } from '@/features/challenges/components/ChallengeCard';
 import { EmptyState } from '@/components/feedback/EmptyState';
@@ -46,7 +47,7 @@ export default async function FeedPage({
   const { akis } = await searchParams;
   const interests = await onboardingService.interestCategoryIds(actor.id);
 
-  const [events, incoming, open, rating, balance, social, gazetteEligible, results] =
+  const [events, incoming, open, rating, balance, social, gazetteEligible, results, allResults] =
     await Promise.all([
       catalogService.listOpenEvents(actor.id, 20, undefined, interests),
       challengeService.listIncoming(actor.id),
@@ -67,10 +68,34 @@ export default async function FeedPage({
        * geçmişle dolmasın — asıl eylem hâlâ yeni tahmin.
        */
       predictionService.recentResults(actor.id, 24 * 7),
+      /*
+       * BİTEN MEYDANLAR — TAHMİN ETMEDİKLERİN DE DÂHİL.
+       *
+       * Yukarıdaki sorgu yalnızca KENDİ tahminlerini getirir. Bu, akıştan
+       * geçen ama tahmin edilmeyen her maçın sonucunun kullanıcı için
+       * sonsuza kadar kaybolması demekti: maç akışta görünüyor, kapanıyor,
+       * listeden düşüyor ve bir daha hiçbir yerde görünmüyordu.
+       *
+       * Sonuç listesini önce ana sayfaya ve /sonuclar'a koydum; oysa giriş
+       * yapmış kullanıcı ana sayfayı GÖRMÜYOR — burada yaşıyor. Aynı hatayı
+       * (düzenlediğim sayfayı düzeltip kullanıcının kullandığı sayfayı
+       * atlamak) dördüncü kez yaptım; bu satır o hatanın kaydıdır.
+       */
+      catalogService.resultsBoard(7, 12),
     ]);
 
   const isNewUser = rating.completed === 0;
   const gazetteReady = gazetteEligible.length;
+
+  /*
+   * AYNI MAÇ İKİ KEZ GÖSTERİLMEZ.
+   *
+   * Kendi tahminin varsa maç yukarıda "Ben demiştim" kartı olarak zaten
+   * duruyor; aşağıdaki listede tekrar çıkması ekranı olduğundan dolu
+   * gösterirdi. Ana sayfada gazete raflarında tam olarak bu olmuştu.
+   */
+  const mine = new Set(results.map((r) => r.eventId));
+  const otherResults = allResults.filter((r) => !mine.has(r.id)).slice(0, 5);
 
   return (
     <main className="space-y-6">
@@ -151,14 +176,41 @@ export default async function FeedPage({
           </div>
           {/* Sonucu gören kişiyi YENİ TAHMİNE bağlayan cümle. Ölçtüğümüz
               davranış tam olarak bu geçiş. */}
-          <p className="text-muted mt-3 text-sm">
-            Sıradaki tahminin aşağıda seni bekliyor.
-            <span aria-hidden="true"> · </span>
+          {/* Sonucu gören kişiyi YENİ TAHMİNE bağlayan cümle. Ölçtüğümüz
+              davranış tam olarak bu geçiş. */}
+          <p className="text-muted mt-3 text-sm">Sıradaki tahminin aşağıda seni bekliyor.</p>
+        </section>
+      )}
+
+      {/* ── BİTEN MEYDANLAR — tahmin etmediklerin de ──────────────────────
+          Akıştan geçen bir maçı tahmin etmeyen kullanıcı, o maçın sonucunu
+          HİÇBİR YERDE göremiyordu: maç kapanıyor, açık listeden düşüyor ve
+          kayboluyordu. Oysa sonucu merak etmek için tahmin etmiş olmak
+          gerekmez — merak, tahminden önce gelir ve çoğu zaman tahmini o
+          getirir.
+
+          Kendi tahminlerin yukarıda; burada yalnızca ötekiler var. */}
+      {otherResults.length > 0 && (
+        <section aria-labelledby="biten-baslik">
+          <h2 id="biten-baslik" className="text-ink mb-1 text-lg font-bold">
+            <span aria-hidden="true">📋 </span>Biten meydanlar
+          </h2>
+          <p className="text-muted mb-3 text-sm">
+            {results.length > 0
+              ? 'Tahmin etmediklerin de dâhil, son yedi gün.'
+              : 'Son yedi günde sonuçlananlar.'}
+          </p>
+          <ul className="space-y-2">
+            {otherResults.map((r) => (
+              <ResultRow key={r.id} data={r} />
+            ))}
+          </ul>
+          <p className="mt-3 text-sm">
             <Link
               href="/sonuclar"
-              className="text-brand font-semibold underline underline-offset-4"
+              className="text-brand focus-visible:outline-ink font-semibold underline underline-offset-4 focus-visible:outline-2"
             >
-              Biten tüm meydanlar
+              Son 7 günün tüm sonuçları →
             </Link>
           </p>
         </section>
