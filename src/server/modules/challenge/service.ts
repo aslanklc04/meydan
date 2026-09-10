@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db, withTransaction, type Tx } from '@/server/db';
 import { challenges, eventOutcomes, events, predictions, users } from '@/server/db/schema';
@@ -69,6 +69,12 @@ export const challengeService = {
       if (!supportsChallenge(outcomes)) {
         throw new BusinessRuleError('NOT_CHALLENGEABLE', 'Bu etkinlikte Meydan Okuma açılamaz.');
       }
+      /*
+       * Karşı taraf ARTIK BURADA ATANMAZ (göç 0018): kabul eden kendi
+       * tarafını kabul anında seçer. Bu çağrı yalnızca "en az bir karşı
+       * seçenek var mı" sorusunu cevaplamak için duruyor — yoksa açılan
+       * Meydan Okuma kabul edilemez olurdu.
+       */
       const counter = pickCounterOutcome(outcomes, input.outcomeId);
       if (!counter) {
         throw new BusinessRuleError('NOT_CHALLENGEABLE', 'Bu etkinlikte Meydan Okuma açılamaz.');
@@ -212,7 +218,6 @@ export const challengeService = {
             creatorId: input.creatorId,
             opponentId,
             creatorOutcomeId: input.outcomeId,
-            opponentOutcomeId: counter.id,
             creatorPredictionId: prediction.id,
             stakeAmount: input.stakeAmount,
             expiresAt: computeExpiry(event.closesAt, now),
@@ -308,7 +313,19 @@ export const challengeService = {
    *
    * Kabul edenin sonucu ADR-18 uyarınca OTOMATİK atanır; tekrar seçim istenmez.
    */
-  async accept(challengeId: string, actorId: string): Promise<{ balance: number }> {
+  /**
+   * Meydan Okumayı kabul eder — KABUL EDEN KENDİ TARAFINI SEÇEREK.
+   *
+   * `outcomeId` oluşturanın seçtiğinden farklı ve aynı etkinliğe ait olmak
+   * zorundadır; ikisi de burada doğrulanır ve veritabanı kısıtıyla ikinci kez
+   * güvenceye alınır. Aynı tarafı seçmek meydan okuma değildir: ortada bir
+   * iddia olmaz, çipler yer değiştirmez.
+   */
+  async accept(
+    challengeId: string,
+    actorId: string,
+    outcomeId: string,
+  ): Promise<{ balance: number }> {
     const now = new Date();
 
     return withTransaction(async (tx) => {
@@ -346,17 +363,35 @@ export const challengeService = {
         throw new BusinessRuleError('INSUFFICIENT_BALANCE', 'Yeterli Gümüş Çipin yok.');
       }
 
-      // Karşıt sonuç zaten atanmış; burada yalnızca doğrulanır.
-      if (challenge.opponentOutcomeId === challenge.creatorOutcomeId) {
-        throw new BusinessRuleError('SAME_OUTCOME_NOT_ALLOWED', 'Karşıt sonuç seçilmeli.');
+      /*
+       * ── KABUL EDENİN TARAFI ────────────────────────────────────────────
+       * Seçim kabul edene ait, ama denetim sunucuya. İstemciye güvenilseydi
+       * kabul eden, oluşturanla AYNI tarafı seçip riski sıfırlayabilirdi:
+       * iki taraf da aynı şeyi savunur, ikisi de kazanır ya da kaybeder,
+       * çipler yer değiştirmez ve ortada meydan okuma kalmaz.
+       */
+      if (outcomeId === challenge.creatorOutcomeId) {
+        throw new BusinessRuleError(
+          'SAME_OUTCOME_NOT_ALLOWED',
+          'Karşı tarafı seçmelisin; aynı tarafta olursanız ortada bir iddia olmaz.',
+        );
       }
+
+      const chosen = await tx
+        .select({ id: eventOutcomes.id })
+        .from(eventOutcomes)
+        .where(and(eq(eventOutcomes.id, outcomeId), eq(eventOutcomes.eventId, challenge.eventId)))
+        .limit(1);
+      // Başka bir etkinliğin sonucu gönderilmiş olabilir; kimlik tek başına
+      // aidiyet kanıtı değildir.
+      if (!chosen[0]) throw new BusinessRuleError('OUTCOME_NOT_IN_EVENT', 'Geçersiz seçim.');
 
       let opponentPredictionId: string;
       try {
         const prediction = await insertPrediction(tx, {
           userId: actorId,
           eventId: challenge.eventId,
-          outcomeId: challenge.opponentOutcomeId,
+          outcomeId,
           categoryId: event.categoryId,
           stakeAmount: challenge.stakeAmount,
           locked: true,
@@ -378,6 +413,10 @@ export const challengeService = {
         .set({
           status: 'ACCEPTED',
           opponentId: actorId,
+          // Kabul edenin seçtiği taraf burada yazılır: kabul anına kadar
+          // boştu. Veritabanı kısıtı, kabul edilmiş bir satırda bu alanın
+          // dolu olmasını ayrıca zorunlu kılar.
+          opponentOutcomeId: outcomeId,
           opponentPredictionId,
           acceptedAt: now,
         })
@@ -410,7 +449,7 @@ export const challengeService = {
       const opponentOutcome = await tx
         .select({ label: eventOutcomes.label })
         .from(eventOutcomes)
-        .where(eq(eventOutcomes.id, challenge.opponentOutcomeId))
+        .where(eq(eventOutcomes.id, outcomeId))
         .limit(1);
 
       await publishPredictionToFollowers(tx, {
@@ -520,8 +559,30 @@ export const challengeService = {
     return userId ? rows.filter((r) => r.creatorId !== userId) : rows;
   },
 
+  /**
+   * Kullanıcının TARAF OLDUĞU bütün Meydan Okumalar — açtıkları VE kabul
+   * ettikleri.
+   *
+   * ── NEDEN İKİSİ BİRDEN ─────────────────────────────────────────────────
+   * Önceden yalnızca `creatorId` sorgulanıyordu. Sonucu şuydu: kullanıcı açık
+   * bir Meydan Okumayı KABUL ettiğinde o kayıt hiçbir sekmede görünmüyordu —
+   * "Gelen"de değil (davet ona gönderilmemişti), "Gönderdiklerim"de değil
+   * (açan o değildi), "Açık Meydanlar"da değil (artık kabul edilmişti),
+   * "Tamamlananlar"da da değil (o liste de yalnızca açtıklarına bakıyordu).
+   *
+   * Yani kullanıcı çipini ortaya koyuyor ve o çipin nereye gittiğini bir daha
+   * göremiyordu. Sonuç geldiğinde bile göremeyecekti. Bir bakiye hareketi
+   * kullanıcıya açıklanamıyorsa, o ürün kendi parasının hesabını veremiyor
+   * demektir.
+   *
+   * `or` kullanılır: taraf olmak iki yoldan biriyle olur ve ikisi de aynı
+   * derecede taraftır.
+   */
   async listMine(userId: string, ctx: Ctx = db) {
-    return listChallengeCards(ctx, eq(challenges.creatorId, userId));
+    return listChallengeCards(
+      ctx,
+      or(eq(challenges.creatorId, userId), eq(challenges.opponentId, userId)),
+    );
   },
 
   async getById(challengeId: string, ctx: Ctx = db) {
@@ -573,38 +634,85 @@ export const challengeService = {
   },
 };
 
-/** Kart görünümü: kullanıcıya gösterilecek her şey tek sorguda (N+1 yok). */
+/**
+ * Kart görünümü: kullanıcıya gösterilecek her şey (N+1 yok).
+ *
+ * `options` = kabul edenin seçebileceği taraflar, yani oluşturanın seçtiği
+ * HARİÇ o etkinliğin bütün sonuçları. Kabul eden artık kendi tarafını
+ * seçtiği için kartın bu listeye ihtiyacı var.
+ *
+ * Seçenekler İKİNCİ BİR SORGUDA, tüm etkinlikler için toplu çekilir: kart
+ * başına ayrı sorgu açmak otuz kartta otuz sorgu demekti.
+ */
 async function listChallengeCards(ctx: Ctx, where: ReturnType<typeof eq> | undefined) {
+  const rows = await baseChallengeCards(ctx, where);
+  if (rows.length === 0) return [];
+
+  const outcomeRows = await ctx
+    .select({
+      id: eventOutcomes.id,
+      eventId: eventOutcomes.eventId,
+      label: eventOutcomes.label,
+      sortOrder: eventOutcomes.sortOrder,
+    })
+    .from(eventOutcomes)
+    .where(inArray(eventOutcomes.eventId, [...new Set(rows.map((r) => r.eventId))]))
+    .orderBy(eventOutcomes.sortOrder);
+
+  const byEvent = new Map<string, { id: string; label: string; creatorOutcomeId?: string }[]>();
+  for (const o of outcomeRows) {
+    const list = byEvent.get(o.eventId) ?? [];
+    list.push({ id: o.id, label: o.label });
+    byEvent.set(o.eventId, list);
+  }
+
+  return rows.map((r) => ({
+    ...r,
+    options: (byEvent.get(r.eventId) ?? [])
+      .filter((o) => o.id !== r.creatorOutcomeId)
+      .map((o) => ({ id: o.id, label: o.label })),
+  }));
+}
+
+async function baseChallengeCards(ctx: Ctx, where: ReturnType<typeof eq> | undefined) {
   const creatorOutcome = alias(eventOutcomes, 'creator_outcome');
   const opponentOutcome = alias(eventOutcomes, 'opponent_outcome');
-  return ctx
-    .select({
-      id: challenges.id,
-      mode: challenges.mode,
-      status: challenges.status,
-      stakeAmount: challenges.stakeAmount,
-      expiresAt: challenges.expiresAt,
-      createdAt: challenges.createdAt,
-      creatorId: challenges.creatorId,
-      creatorUsername: users.username,
-      opponentId: challenges.opponentId,
-      eventId: challenges.eventId,
-      eventTitle: events.title,
-      eventQuestion: events.question,
-      closesAt: events.closesAt,
-      creatorOutcomeLabel: creatorOutcome.label,
-      opponentOutcomeLabel: opponentOutcome.label,
-      winnerUserId: challenges.winnerUserId,
-      settlement: challenges.settlement,
-    })
-    .from(challenges)
-    .innerJoin(users, eq(users.id, challenges.creatorId))
-    .innerJoin(events, eq(events.id, challenges.eventId))
-    .innerJoin(creatorOutcome, eq(creatorOutcome.id, challenges.creatorOutcomeId))
-    .innerJoin(opponentOutcome, eq(opponentOutcome.id, challenges.opponentOutcomeId))
-    .where(where)
-    .orderBy(desc(challenges.createdAt))
-    .limit(30);
+  return (
+    ctx
+      .select({
+        id: challenges.id,
+        mode: challenges.mode,
+        status: challenges.status,
+        stakeAmount: challenges.stakeAmount,
+        expiresAt: challenges.expiresAt,
+        createdAt: challenges.createdAt,
+        creatorId: challenges.creatorId,
+        creatorUsername: users.username,
+        opponentId: challenges.opponentId,
+        eventId: challenges.eventId,
+        eventTitle: events.title,
+        eventQuestion: events.question,
+        closesAt: events.closesAt,
+        creatorOutcomeId: challenges.creatorOutcomeId,
+        creatorOutcomeLabel: creatorOutcome.label,
+        opponentOutcomeLabel: opponentOutcome.label,
+        winnerUserId: challenges.winnerUserId,
+        settlement: challenges.settlement,
+      })
+      .from(challenges)
+      .innerJoin(users, eq(users.id, challenges.creatorId))
+      .innerJoin(events, eq(events.id, challenges.eventId))
+      .innerJoin(creatorOutcome, eq(creatorOutcome.id, challenges.creatorOutcomeId))
+      /*
+       * `leftJoin`: kabul edilmemiş bir Meydan Okumada karşı taraf henüz
+       * seçilmemiştir. `innerJoin` olsaydı bekleyen bütün Meydan Okumalar
+       * listelerden SESSİZCE düşerdi — kayıt durur, ekranda görünmezdi.
+       */
+      .leftJoin(opponentOutcome, eq(opponentOutcome.id, challenges.opponentOutcomeId))
+      .where(where)
+      .orderBy(desc(challenges.createdAt))
+      .limit(30)
+  );
 }
 
 /** İade — idempotent. Aynı meydan okuma ikinci kez iade edilemez. */
