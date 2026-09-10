@@ -1,4 +1,4 @@
-import { and, eq, inArray, like, lt } from 'drizzle-orm';
+import { and, eq, inArray, isNull, like, lt } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { events, eventOutcomes } from '@/server/db/schema';
 import { users } from '@/server/db/schema';
@@ -153,6 +153,36 @@ function badgeUrl(raw: string | null | undefined): string | null {
   }
 }
 
+/**
+ * Var olan bir etkinliğin EKSİK armalarını tamamlar.
+ *
+ * `isNull(imageUrl)` koşulu bu işi güvenli kılan şeydir: yalnızca hiç arma
+ * olmayan satıra yazar. Koşul olmasaydı, her içeri alma turunda kayıtlı
+ * armalar yeniden yazılırdı ve kaynaktaki geçici bir bozulma (boş alan, ölü
+ * adres) sessizce iyi veriyi silerdi. Tamamlama, güncelleme değildir.
+ *
+ * Beraberlik seçeneğine dokunulmaz — bir takım değildir, arması olamaz.
+ */
+async function backfillBadges(
+  eventId: string,
+  badges: Readonly<Record<'HOME' | 'AWAY', string | null>>,
+): Promise<void> {
+  for (const key of ['HOME', 'AWAY'] as const) {
+    const url = badges[key];
+    if (!url) continue;
+    await db
+      .update(eventOutcomes)
+      .set({ imageUrl: url })
+      .where(
+        and(
+          eq(eventOutcomes.eventId, eventId),
+          eq(eventOutcomes.key, key),
+          isNull(eventOutcomes.imageUrl),
+        ),
+      );
+  }
+}
+
 function apiKey(): string {
   return process.env.THESPORTSDB_KEY?.trim() || FREE_KEY;
 }
@@ -301,6 +331,25 @@ export const fixturesService = {
           .where(eq(events.slug, slug))
           .limit(1);
         if (existing[0]) {
+          /*
+           * ── ESKİ ETKİNLİKLERE ARMA TAMAMLAMA ────────────────────────────
+           *
+           * Arma alanı sonradan eklendi. Bu satır olmadan, alan eklenmeden
+           * ÖNCE içeri alınmış maçlar ömür boyu armasız kalırdı: içeri alma
+           * işi onları "zaten var" diye atlıyor ve bir daha hiç dokunmuyordu.
+           * Canlıda tam olarak bu görüldü — Günün Meydanı'ndaki maçın
+           * armaları hiç gelmedi.
+           *
+           * YALNIZCA BOŞ OLANI DOLDURUR. Var olan bir armanın üstüne
+           * yazılmaz; sonuç etiketleri, sıralama ve başka hiçbir alan
+           * değiştirilmez. Bir tamamlama işi, bir güncelleme işine
+           * dönüşmemelidir: kullanıcının gördüğü etiketin altından
+           * değişmesi, tahminini neye göre yaptığını belirsizleştirir.
+           */
+          await backfillBadges(existing[0].id, {
+            HOME: badgeUrl(event.strHomeTeamBadge),
+            AWAY: badgeUrl(event.strAwayTeamBadge),
+          });
           skipped += 1;
           continue;
         }
