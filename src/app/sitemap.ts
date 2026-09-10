@@ -21,6 +21,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const staticEntries: MetadataRoute.Sitemap = [
     { url: `${base}/`, changeFrequency: 'daily', priority: 1 },
+    // Sonuç listesi her gün değişir ve ürünün dışarıdan doğrulanabilir tek
+    // kanıtıdır: arama motoruna da öyle tanıtılır.
+    { url: `${base}/sonuclar`, changeFrequency: 'daily', priority: 0.7 },
     { url: `${base}/tahmin-gucu`, changeFrequency: 'monthly', priority: 0.5 },
     // Yasal sayfalar da kalıcı ve herkese açık içeriktir; kayıt olmadan
     // okunabilmeleri gerekir.
