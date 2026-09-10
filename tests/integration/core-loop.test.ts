@@ -14,7 +14,7 @@ import { notificationService } from '../../src/server/modules/social/notificatio
 import { auditService } from '../../src/server/modules/governance/audit.service';
 import { jobsService } from '../../src/server/modules/governance/jobs.service';
 import { economy, rating } from '../../src/config';
-import { createEvent, createUser } from '../factories';
+import { acceptChallenge, createEvent, createUser } from '../factories';
 
 /**
  * ÇEKİRDEK DÖNGÜ — GERÇEK PostgreSQL ÜZERİNDE UÇTAN UCA (Faz 6).
@@ -108,7 +108,7 @@ describe('23 ADIMLIK TAM DÖNGÜ', () => {
     expect(await notificationService.unreadCount(mert.userId)).toBeGreaterThan(0);
 
     // ── 11–12. Kabul eder; çip hareketleri gerçekleşir ────────────────────
-    await challengeService.accept(challengeId, mert.userId);
+    await acceptChallenge(challengeId, mert.userId);
     expect(await coinService.getBalance(mert.userId)).toBe(economy.initialGrant - stake);
     await assertLedgerBalanced();
 
@@ -218,7 +218,7 @@ describe('İDEMPOTENCY — aynı işlem iki kez', () => {
       stakeAmount: stake,
       opponentUsername: mert.username,
     });
-    await challengeService.accept(challengeId, mert.userId);
+    await acceptChallenge(challengeId, mert.userId);
 
     return { emir, mert, admin, event, challengeId, stake };
   }
@@ -265,7 +265,7 @@ describe('İDEMPOTENCY — aynı işlem iki kez', () => {
 
   it('AYNI Meydan Okuma iki kez kabul edilemez', async () => {
     const { challengeId, mert } = await settledChallenge();
-    await expect(challengeService.accept(challengeId, mert.userId)).rejects.toThrow(
+    await expect(acceptChallenge(challengeId, mert.userId)).rejects.toThrow(
       /artık geçerli değil|kabul edildi/i,
     );
   });
@@ -286,8 +286,8 @@ describe('İDEMPOTENCY — aynı işlem iki kez', () => {
     // İki istek AYNI ANDA: uygulama kontrolü ikisini de geçebilir, satır
     // kilidi ve koşullu UPDATE geçemez.
     const results = await Promise.allSettled([
-      challengeService.accept(challengeId, a.userId),
-      challengeService.accept(challengeId, b.userId),
+      acceptChallenge(challengeId, a.userId),
+      acceptChallenge(challengeId, b.userId),
     ]);
 
     const fulfilled = results.filter((r) => r.status === 'fulfilled');
