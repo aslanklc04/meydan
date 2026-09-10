@@ -11,8 +11,14 @@ import { acceptChallengeAction, cancelChallengeAction, declineChallengeAction } 
 /**
  * Meydan Okuma kartı.
  *
- * ADR-18: kabul edenin sonucu ZATEN atanmıştır ve burada AÇIKÇA gösterilir.
- * Kullanıcı ne aldığını görür ama tekrar seçim yapmaz.
+ * ── KABUL EDEN KENDİ TARAFINI SEÇER ────────────────────────────────────────
+ * Eskiden karşı taraf oluşturma anında atanıyordu ve kabul eden yalnızca
+ * "Kabul Et"e basıyordu. Üç sonuçlu bir maçta bu, kabul edene çoğunlukla
+ * BERABERLİK'i veriyordu — kimsenin seçmeyeceği bir tarafı, seçmeden.
+ *
+ * Şimdi kalan seçenekler düğme olarak gösterilir. Tek seçenek varsa (iki
+ * sonuçlu etkinlik) hazır işaretli gelir: o durumda akış eskisiyle aynı, tek
+ * dokunuş.
  */
 
 export type ChallengeCardData = {
@@ -22,7 +28,10 @@ export type ChallengeCardData = {
   readonly eventTitle: string;
   readonly eventQuestion: string;
   readonly creatorOutcomeLabel: string;
-  readonly yourOutcomeLabel: string;
+  /** Kabul edilmiş Meydan Okumada karşı tarafın seçtiği sonuç; yoksa null. */
+  readonly yourOutcomeLabel: string | null;
+  /** Kabul edenin seçebileceği taraflar — oluşturanınki hariç. */
+  readonly options: readonly { readonly id: string; readonly label: string }[];
   readonly stakeAmount: number;
   readonly expiresAt: string;
 };
@@ -38,6 +47,11 @@ export function ChallengeCard({ challenge, kind }: Props) {
   const { show } = useToast();
   const [result, setResult] = useState<FlowResult | null>(null);
   const [pending, startTransition] = useTransition();
+  /* Tek seçenek varsa hazır işaretli: iki sonuçlu etkinlikte fazladan adım
+     doğmasın. Birden fazlaysa kullanıcı bilinçli olarak seçer. */
+  const [side, setSide] = useState<string | null>(
+    challenge.options.length === 1 ? (challenge.options[0]?.id ?? null) : null,
+  );
 
   const run = (fn: () => Promise<FlowResult>) => {
     setResult(null);
@@ -71,7 +85,7 @@ export function ChallengeCard({ challenge, kind }: Props) {
           <span className="text-muted">@{challenge.creatorUsername}:</span>{' '}
           <strong className="text-ink">{challenge.creatorOutcomeLabel}</strong>
         </p>
-        {kind !== 'mine' && (
+        {kind !== 'mine' && challenge.yourOutcomeLabel && (
           <p>
             <span className="text-muted">Sen:</span>{' '}
             <strong className="text-ink">{challenge.yourOutcomeLabel}</strong>
@@ -89,15 +103,45 @@ export function ChallengeCard({ challenge, kind }: Props) {
         </Link>
       </p>
 
-      {kind !== 'mine' && (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => run(() => acceptChallengeAction(challenge.id))}
-          className="bg-brand text-brand-fg mt-3 min-h-13 w-full rounded-lg py-3 text-base font-bold disabled:opacity-60"
-        >
-          Meydan Okumayı Kabul Et
-        </button>
+      {kind !== 'mine' && challenge.options.length > 0 && (
+        <div className="mt-3">
+          <p className="text-ink text-sm font-semibold">Sen hangi taraftasın?</p>
+          <div className="mt-2 grid gap-2">
+            {challenge.options.map((o) => {
+              const selected = side === o.id;
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setSide(selected ? null : o.id)}
+                  className={[
+                    'focus-visible:outline-ink min-h-12 w-full rounded-lg border px-4 py-2 text-left text-base font-medium focus-visible:outline-2 focus-visible:outline-offset-2',
+                    selected
+                      ? 'border-brand bg-brand text-brand-fg'
+                      : 'border-border bg-background text-ink',
+                  ].join(' ')}
+                >
+                  <span aria-hidden="true">{selected ? '✓ ' : ''}</span>
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            disabled={pending || side === null}
+            onClick={() => side && run(() => acceptChallengeAction(challenge.id, side))}
+            className="bg-brand text-brand-fg mt-3 min-h-13 w-full rounded-lg py-3 text-base font-bold disabled:opacity-50"
+          >
+            {side === null ? 'Önce tarafını seç' : `Kabul Et · ${challenge.stakeAmount} Çip ortaya`}
+          </button>
+          {/* Çip kabul anında gider; kullanıcı basmadan önce bilmeli. */}
+          <p className="text-muted mt-2 text-xs">
+            Kabul edince {challenge.stakeAmount} Gümüş Çipin ortaya konur ve tahminin kilitlenir.
+          </p>
+        </div>
       )}
 
       {kind === 'incoming' && (
