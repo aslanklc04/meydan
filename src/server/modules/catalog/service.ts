@@ -474,7 +474,20 @@ export const catalogService = {
      * TAMAMEN düşerdi — oysa kullanıcının aradığı satır çoğu zaman tam
      * olarak o olur: "maçım ne oldu?"
      */
-    const settledAt = sql<Date>`coalesce(${events.resolvedAt}, ${events.updatedAt})`;
+    /*
+     * TÜR `string | Date` — VE BU BİR AYRINTI DEĞİL.
+     *
+     * Hesaplanmış bir sütun (burada `coalesce`) sürücünün tarih
+     * dönüştürücüsünden GEÇMEZ: geriye `Date` değil METİN gelir. Bunu
+     * `sql<Date>` diye yazmak TypeScript'e söylenmiş bir yalandır; derleyici
+     * inanır, ekranda `date.getTime is not a function` diye patlar ve ana
+     * sayfa tamamen açılmaz. Canlıda tam olarak bu oldu.
+     *
+     * Aynı hata gazete rafında da yapılmış ve orada `new Date(...)` ile
+     * çözülmüştü; burada tekrarlandı. Doğru tür yazılır, dönüşüm aşağıda
+     * TEK YERDE yapılır.
+     */
+    const settledAt = sql<string | Date>`coalesce(${events.resolvedAt}, ${events.updatedAt})`;
 
     const rows = await ctx
       .select({
@@ -515,6 +528,8 @@ export const catalogService = {
 
     return rows.map((r) => ({
       ...r,
+      /* Ekrana `Date` çıkar; metin bu satırdan öteye geçmez. */
+      resolvedAt: r.resolvedAt ? new Date(r.resolvedAt) : null,
       voided: r.status === 'VOID',
       /*
        * İptalde "kimse bilemedi" DEĞİL, "sayılmadı" doğrudur. Bu yüzden
