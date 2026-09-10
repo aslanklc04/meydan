@@ -206,14 +206,23 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
           </ul>
         )}
 
-        {consensus.revealed && consensus.position === 'MINORITY' && (
+        {/* İDDİA KENDİ KANITINI TAŞISIN. "Azınlıktasın" bir yorumdur; yanına
+            hangi sayıdan çıktığı yazılırsa kullanıcı ona itiraz edebilir.
+            Buradaki sayılar kullanıcının KENDİSİNİ İÇERMEZ — kendini sayarak
+            "çoğunluktasın" demek kendini kendinle doğrulamaktır. */}
+        {consensus.revealed && consensus.position !== null && (
           <p className="text-ink mt-3 text-sm font-semibold">
-            <span aria-hidden="true">🐺 </span>Azınlıktasın.
-          </p>
-        )}
-        {consensus.revealed && consensus.position === 'MAJORITY' && (
-          <p className="text-ink mt-3 text-sm font-semibold">
-            <span aria-hidden="true">👥 </span>Çoğunluktasın.
+            {consensus.position === 'MINORITY' && <span aria-hidden="true">🐺 Azınlıktasın. </span>}
+            {consensus.position === 'MAJORITY' && (
+              <span aria-hidden="true">👥 Çoğunluktasın. </span>
+            )}
+            {consensus.position === 'SPLIT' && (
+              <span aria-hidden="true">⚖️ Meydan ikiye bölünmüş. </span>
+            )}
+            <span className="text-muted font-normal">
+              Senin dışındaki {formatCount(consensus.othersTotal)} kişiden{' '}
+              {formatCount(consensus.othersWithUser)}&apos;i seninle aynı tarafta.
+            </span>
           </p>
         )}
       </section>
