@@ -32,6 +32,9 @@ export default function robots(): MetadataRoute.Robots {
            * durur çünkü robots.txt bir rica, sayfa etiketi ise ikinci kapıdır.
            */
           '/g/',
+          // Tek soruluk meydan okuma bağlantıları da aynı sebeple dizine
+          // girmez: bağlantı tahmin edilemez ama gizli değildir.
+          '/m/',
         ],
       },
     ],
