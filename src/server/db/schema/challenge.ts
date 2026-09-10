@@ -13,9 +13,11 @@ import { predictions } from './prediction';
  *
  * SAHTE/BOT RAKİP YOKTUR. Karşı taraf her zaman gerçek bir kullanıcı hesabıdır.
  *
- * ADR-18: karşı sonuç (`opponentOutcomeId`) OLUŞTURMA anında deterministik olarak
- * atanır ve kabul kartında açıkça gösterilir. Kabul eden ekstra seçim yapmaz ama
- * ne aldığını bilir.
+ * ADR-18 GÜNCELLENDİ (göç 0018): karşı sonuç artık oluşturmada atanmaz, KABUL
+ * ANINDA kabul eden kişi tarafından seçilir. Eski deterministik atama üç
+ * sonuçlu maçlarda kabul edene çoğunlukla beraberliği veriyordu ve iki tarafın
+ * pozisyonu eşit olmuyordu. İki sonuçlu etkinlikte seçenek zaten tek olduğu
+ * için arayüz onu hazır işaretler; fazladan adım doğmaz.
  */
 
 export const challengeMode = pgEnum('challenge_mode', ['DIRECT', 'OPEN']);
@@ -67,10 +69,16 @@ export const challenges = pgTable(
     creatorOutcomeId: text('creator_outcome_id')
       .notNull()
       .references(() => eventOutcomes.id),
-    /** ADR-18: oluşturmada atanır, kabul öncesi kullanıcıya gösterilir. */
-    opponentOutcomeId: text('opponent_outcome_id')
-      .notNull()
-      .references(() => eventOutcomes.id),
+    /**
+     * Kabul edenin savunduğu sonuç — KABUL ANINDA, kabul eden tarafından
+     * seçilir. Kabul edilene kadar null.
+     *
+     * Önceden oluşturma anında deterministik olarak atanıyordu (ADR-18). Üç
+     * sonuçlu maçlarda bu, kabul edene çoğu zaman BERABERLİK'i veriyordu:
+     * oluşturan en olası sonucu seçiyor, karşı taraf azınlıkta kalan sonucu
+     * almış oluyordu. Pozisyonlar eşit değildi.
+     */
+    opponentOutcomeId: text('opponent_outcome_id').references(() => eventOutcomes.id),
 
     creatorPredictionId: text('creator_prediction_id')
       .notNull()
