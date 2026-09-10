@@ -364,3 +364,61 @@ describe('istek biçimi', () => {
     expect(calls).toHaveLength(3);
   });
 });
+
+describe('takım armaları', () => {
+  it('sağlayıcının armalarını doğru tarafa yazar', async () => {
+    await makeAdmin();
+    stubApi({
+      next: [
+        {
+          idEvent: '8080',
+          strHomeTeam: 'Galatasaray',
+          strAwayTeam: 'Fenerbahçe',
+          strTimestamp: future(30),
+          strHomeTeamBadge: 'https://r2.thesportsdb.com/images/media/team/badge/ev.png',
+          strAwayTeamBadge: 'https://r2.thesportsdb.com/images/media/team/badge/dep.png',
+        },
+      ],
+    });
+    await fixturesService.importUpcoming();
+
+    const rows = await db.select().from(events).where(eq(events.slug, 'mac-8080'));
+    const outcomes = await db
+      .select()
+      .from(eventOutcomes)
+      .where(eq(eventOutcomes.eventId, rows[0]!.id));
+
+    const byKey = Object.fromEntries(outcomes.map((o) => [o.key, o.imageUrl]));
+    expect(byKey.HOME).toContain('/ev.png');
+    expect(byKey.AWAY).toContain('/dep.png');
+    // Beraberliğin arması olmaz.
+    expect(byKey.DRAW).toBeNull();
+  });
+
+  it('YABANCI adresten gelen görseli REDDEDER', async () => {
+    await makeAdmin();
+    stubApi({
+      next: [
+        {
+          idEvent: '8081',
+          strHomeTeam: 'A',
+          strAwayTeam: 'B',
+          strTimestamp: future(30),
+          // Veri kaynağı bir gün ele geçirilirse ya da hatalı veri
+          // gönderirse, sayfaya istenmeyen içerik taşınmamalı.
+          strHomeTeamBadge: 'https://kotu-site.example/izleme.png',
+          strAwayTeamBadge: 'javascript:alert(1)',
+        },
+      ],
+    });
+    await fixturesService.importUpcoming();
+
+    const rows = await db.select().from(events).where(eq(events.slug, 'mac-8081'));
+    const outcomes = await db
+      .select()
+      .from(eventOutcomes)
+      .where(eq(eventOutcomes.eventId, rows[0]!.id));
+
+    for (const outcome of outcomes) expect(outcome.imageUrl).toBeNull();
+  });
+});
