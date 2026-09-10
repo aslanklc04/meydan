@@ -422,3 +422,133 @@ describe('takım armaları', () => {
     for (const outcome of outcomes) expect(outcome.imageUrl).toBeNull();
   });
 });
+
+describe('eski etkinliklere arma tamamlama', () => {
+  it('ARMASIZ içeri alınmış maça sonraki turda armayı YAZAR', async () => {
+    // Canlıda görülen hata: arma alanı sonradan eklendi, ondan önce içeri
+    // alınmış maçlar "zaten var" diye atlanıyor ve ömür boyu armasız
+    // kalıyordu. Günün Meydanı'ndaki maçın armaları hiç gelmedi.
+    await makeAdmin();
+
+    stubApi({
+      next: [
+        {
+          idEvent: '9100',
+          strHomeTeam: 'PSV Eindhoven',
+          strAwayTeam: 'Shakhtar Donetsk',
+          strTimestamp: future(30),
+          // İlk turda sağlayıcı arma vermiyor.
+        },
+      ],
+    });
+    expect((await fixturesService.importUpcoming()).imported).toBe(1);
+
+    const rows = await db.select().from(events).where(eq(events.slug, 'mac-9100'));
+    const eventId = rows[0]!.id;
+    const before = await db.select().from(eventOutcomes).where(eq(eventOutcomes.eventId, eventId));
+    expect(Object.fromEntries(before.map((o) => [o.key, o.imageUrl])).HOME).toBeNull();
+
+    // İkinci tur: aynı maç, bu kez armalarla.
+    vi.unstubAllGlobals();
+    stubApi({
+      next: [
+        {
+          idEvent: '9100',
+          strHomeTeam: 'PSV Eindhoven',
+          strAwayTeam: 'Shakhtar Donetsk',
+          strTimestamp: future(30),
+          strHomeTeamBadge: 'https://r2.thesportsdb.com/images/media/team/badge/psv.png',
+          strAwayTeamBadge: 'https://r2.thesportsdb.com/images/media/team/badge/shk.png',
+        },
+      ],
+    });
+    const second = await fixturesService.importUpcoming();
+    // Yeni etkinlik AÇILMAZ — yalnızca eksik alan tamamlanır.
+    expect(second.imported).toBe(0);
+
+    const after = await db.select().from(eventOutcomes).where(eq(eventOutcomes.eventId, eventId));
+    const byKey = Object.fromEntries(after.map((o) => [o.key, o.imageUrl]));
+    expect(byKey.HOME).toContain('/psv.png');
+    expect(byKey.AWAY).toContain('/shk.png');
+    expect(byKey.DRAW).toBeNull();
+  });
+
+  it('VAR OLAN armanın üstüne YAZMAZ', async () => {
+    // Tamamlama, güncelleme değildir: kaynaktaki geçici bir bozulma iyi
+    // veriyi silmemeli.
+    await makeAdmin();
+    stubApi({
+      next: [
+        {
+          idEvent: '9101',
+          strHomeTeam: 'A',
+          strAwayTeam: 'B',
+          strTimestamp: future(30),
+          strHomeTeamBadge: 'https://r2.thesportsdb.com/images/media/team/badge/iyi.png',
+        },
+      ],
+    });
+    await fixturesService.importUpcoming();
+
+    vi.unstubAllGlobals();
+    stubApi({
+      next: [
+        {
+          idEvent: '9101',
+          strHomeTeam: 'A',
+          strAwayTeam: 'B',
+          strTimestamp: future(30),
+          strHomeTeamBadge: 'https://r2.thesportsdb.com/images/media/team/badge/YENI.png',
+        },
+      ],
+    });
+    await fixturesService.importUpcoming();
+
+    const rows = await db.select().from(events).where(eq(events.slug, 'mac-9101'));
+    const outcomes = await db
+      .select()
+      .from(eventOutcomes)
+      .where(eq(eventOutcomes.eventId, rows[0]!.id));
+    const byKey = Object.fromEntries(outcomes.map((o) => [o.key, o.imageUrl]));
+    expect(byKey.HOME).toContain('/iyi.png');
+  });
+
+  it('tamamlama sırasında BAŞLIK ve ETİKETLER değişmez', async () => {
+    // Kullanıcı tahminini bir etikete bakarak yapar; o etiketin altından
+    // değişmesi tahminin neye göre yapıldığını belirsizleştirir.
+    await makeAdmin();
+    stubApi({
+      next: [
+        {
+          idEvent: '9102',
+          strHomeTeam: 'Eski Ad',
+          strAwayTeam: 'Rakip',
+          strTimestamp: future(30),
+        },
+      ],
+    });
+    await fixturesService.importUpcoming();
+
+    vi.unstubAllGlobals();
+    stubApi({
+      next: [
+        {
+          idEvent: '9102',
+          strHomeTeam: 'YENİ AD',
+          strAwayTeam: 'Rakip',
+          strTimestamp: future(30),
+          strHomeTeamBadge: 'https://r2.thesportsdb.com/images/media/team/badge/x.png',
+        },
+      ],
+    });
+    await fixturesService.importUpcoming();
+
+    const rows = await db.select().from(events).where(eq(events.slug, 'mac-9102'));
+    expect(rows[0]!.title).toBe('Eski Ad — Rakip');
+    const outcomes = await db
+      .select()
+      .from(eventOutcomes)
+      .where(eq(eventOutcomes.eventId, rows[0]!.id));
+    expect(Object.fromEntries(outcomes.map((o) => [o.key, o.label])).HOME).toBe('Eski Ad');
+  });
+});
