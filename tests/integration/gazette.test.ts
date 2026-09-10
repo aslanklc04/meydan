@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createSql, migrateTestDatabase } from './setup';
 import { db } from '../../src/server/db';
-import { eventOutcomes, events, predictions, users } from '../../src/server/db/schema';
+import { eventOutcomes, events, gazettes, predictions, users } from '../../src/server/db/schema';
 import { catalogService } from '../../src/server/modules/catalog/service';
 import { gazetteService } from '../../src/server/modules/gazette/service';
 import { createUser } from '../factories';
@@ -431,5 +431,310 @@ describe('atıf sayaçları', () => {
     await gazetteService.countSignup(publicToken);
     const mine = await gazetteService.listMine(userId);
     expect(mine[0]!.signupCount).toBe(1);
+  });
+});
+
+describe('görünürlük tercihi', () => {
+  it('varsayılan GİZLİDİR — sorulmadan rafa konmaz', async () => {
+    const { userId } = await createUser('aslan');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+
+    // `isPublic` hiç verilmedi.
+    const { publicToken } = await gazetteService.create({
+      ownerId: userId,
+      title: 'Sessiz kapak',
+      predictionIds: [id],
+    });
+
+    const view = await gazetteService.byToken(publicToken);
+    expect(view!.isPublic).toBe(false);
+    expect(await gazetteService.shelfToday()).toHaveLength(0);
+  });
+
+  it('açıkça istenirse rafta görünür', async () => {
+    const { userId } = await createUser('aslan');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+
+    const { publicToken } = await gazetteService.create({
+      ownerId: userId,
+      title: 'Açık kapak',
+      predictionIds: [id],
+      isPublic: true,
+    });
+
+    const shelf = await gazetteService.shelfToday();
+    expect(shelf.map((g) => g.publicToken)).toContain(publicToken);
+    expect(shelf[0]!.headlineCount).toBe(1);
+  });
+
+  it('GİZLİ kapağın BAĞLANTISI çalışmaya devam eder', async () => {
+    // Gizli demek "silinmiş" demek değil: kullanıcı bağlantıyı istediğine
+    // gönderebilmeli.
+    const { userId } = await createUser('aslan');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+    const { publicToken } = await gazetteService.create({
+      ownerId: userId,
+      title: 'Gizli ama paylaşılabilir',
+      predictionIds: [id],
+    });
+    expect(await gazetteService.byToken(publicToken)).not.toBeNull();
+  });
+
+  it('sahibi kapağı raftan çekebilir', async () => {
+    const { userId } = await createUser('aslan');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+    const { publicToken } = await gazetteService.create({
+      ownerId: userId,
+      title: 'Açık kapak',
+      predictionIds: [id],
+      isPublic: true,
+    });
+
+    await gazetteService.makePrivate(publicToken, userId);
+    expect(await gazetteService.shelfToday()).toHaveLength(0);
+    // Bağlantı hâlâ çalışır.
+    expect(await gazetteService.byToken(publicToken)).not.toBeNull();
+  });
+
+  it('raftan çekilen kapak GERİ KONAMAZ — veritabanı reddeder', async () => {
+    // Serbest olsaydı: aç, tutmazsa gizle, tutunca yeniden aç. Raf o zaman
+    // gerçeği değil herkesin en iyi gününü gösterirdi.
+    const { userId } = await createUser('aslan');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+    const { publicToken } = await gazetteService.create({
+      ownerId: userId,
+      title: 'Açık kapak',
+      predictionIds: [id],
+      isPublic: true,
+    });
+    await gazetteService.makePrivate(publicToken, userId);
+
+    // Kural kodda değil, kısıtta: doğrudan veritabanına yazmayı deniyoruz.
+    await expect(
+      db
+        .update(gazettes)
+        .set({ visibility: 'PUBLIC' })
+        .where(eq(gazettes.publicToken, publicToken)),
+    ).rejects.toThrow();
+  });
+
+  it('BAŞKASI kapağı raftan çekemez', async () => {
+    const { userId } = await createUser('aslan');
+    const { userId: other } = await createUser('baskasi');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+    const { publicToken } = await gazetteService.create({
+      ownerId: userId,
+      title: 'Açık kapak',
+      predictionIds: [id],
+      isPublic: true,
+    });
+
+    await expect(gazetteService.makePrivate(publicToken, other)).rejects.toThrow();
+    expect(await gazetteService.shelfToday()).toHaveLength(1);
+  });
+});
+
+describe('moderasyon gizlemesi', () => {
+  it('gizlenen kapak hem RAFTAN hem BAĞLANTIDAN düşer', async () => {
+    // Yalnızca raftan düşseydi gizleme bir gösteriden ibaret olurdu:
+    // içerik, asıl yayıldığı yerde okunmaya devam ederdi.
+    const { userId } = await createUser('aslan');
+    const { userId: modId } = await createUser('yonetici');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+    const { publicToken } = await gazetteService.create({
+      ownerId: userId,
+      title: 'Sorunlu kapak',
+      predictionIds: [id],
+      isPublic: true,
+    });
+
+    await gazetteService.hideByModerator(publicToken, modId);
+
+    expect(await gazetteService.shelfToday()).toHaveLength(0);
+    expect(await gazetteService.byToken(publicToken)).toBeNull();
+  });
+
+  it('gizleme MANŞETLERİ SİLMEZ', async () => {
+    // Gizleme bir sunum kararıdır; tahmin geçmişini yok etmek bambaşka ve
+    // çok daha ağır bir yaptırımdır.
+    const { userId } = await createUser('aslan');
+    const { userId: modId } = await createUser('yonetici');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+    const { publicToken } = await gazetteService.create({
+      ownerId: userId,
+      title: 'Sorunlu kapak',
+      predictionIds: [id],
+      isPublic: true,
+    });
+
+    await gazetteService.hideByModerator(publicToken, modId);
+
+    const stillThere = await db.select().from(predictions).where(eq(predictions.id, id));
+    expect(stillThere).toHaveLength(1);
+  });
+
+  it('ikinci gizleme reddedilir — ilk kararın sahibi korunur', async () => {
+    const { userId } = await createUser('aslan');
+    const { userId: modId } = await createUser('yonetici');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+    const { publicToken } = await gazetteService.create({
+      ownerId: userId,
+      title: 'Kapak',
+      predictionIds: [id],
+      isPublic: true,
+    });
+
+    await gazetteService.hideByModerator(publicToken, modId);
+    await expect(gazetteService.hideByModerator(publicToken, modId)).rejects.toThrow();
+  });
+});
+
+describe('küfür süzgeci gazete başlığında', () => {
+  it('kaba başlık REDDEDİLİR — kapak hiç kurulmaz', async () => {
+    const { userId } = await createUser('aslan');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+
+    await expect(
+      gazetteService.create({ ownerId: userId, title: 'siktir git', predictionIds: [id] }),
+    ).rejects.toThrow();
+
+    expect(await gazetteService.listMine(userId)).toHaveLength(0);
+    // Tahmin serbest kalmalı: reddedilen kapak tahmini tüketmez.
+    const eligible = await gazetteService.eligible(userId);
+    expect(eligible.map((r) => r.predictionId)).toContain(id);
+  });
+
+  it('GİZLİ kapakta da süzgeç çalışır', async () => {
+    // "Nasılsa gizli" demek yanlış: bağlantı paylaşılır ve metin başkasının
+    // ekranında belirir.
+    const { userId } = await createUser('aslan');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+    await expect(
+      gazetteService.create({
+        ownerId: userId,
+        title: 'amk bu maç',
+        predictionIds: [id],
+        isPublic: false,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('başlıkta BAĞLANTI kabul edilmez', async () => {
+    const { userId } = await createUser('aslan');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+    await expect(
+      gazetteService.create({
+        ownerId: userId,
+        title: 'kazanc icin www.kotu.example',
+        predictionIds: [id],
+      }),
+    ).rejects.toThrow(/bağlantı/i);
+  });
+});
+
+describe('raf sıralaması', () => {
+  it('"Tuttu" rafı yalnızca SONUÇLANMIŞ ve İSABETLİ kapakları alır', async () => {
+    const { userId } = await createUser('aslan');
+
+    const bekleyen = await makeEvent();
+    const tutan = await makeEvent();
+    const tutmayan = await makeEvent();
+
+    const idBekleyen = await predict(userId, bekleyen.eventId, bekleyen.byKey.HOME!);
+    const idTutan = await predict(userId, tutan.eventId, tutan.byKey.HOME!);
+    const idTutmayan = await predict(userId, tutmayan.eventId, tutmayan.byKey.HOME!);
+
+    const a = await gazetteService.create({
+      ownerId: userId,
+      title: 'Bekleyen kapak',
+      predictionIds: [idBekleyen],
+      isPublic: true,
+    });
+    const b = await gazetteService.create({
+      ownerId: userId,
+      title: 'Tutan kapak',
+      predictionIds: [idTutan],
+      isPublic: true,
+    });
+    const c = await gazetteService.create({
+      ownerId: userId,
+      title: 'Tutmayan kapak',
+      predictionIds: [idTutmayan],
+      isPublic: true,
+    });
+
+    await db
+      .update(events)
+      .set({ status: 'RESOLVED', resolvedOutcomeId: tutan.byKey.HOME!, resolvedAt: new Date() })
+      .where(eq(events.id, tutan.eventId));
+    await db
+      .update(events)
+      .set({ status: 'RESOLVED', resolvedOutcomeId: tutmayan.byKey.AWAY!, resolvedAt: new Date() })
+      .where(eq(events.id, tutmayan.eventId));
+
+    const hits = await gazetteService.shelfHits();
+    const tokens = hits.map((g) => g.publicToken);
+    expect(tokens).toContain(b.publicToken);
+    expect(tokens).not.toContain(a.publicToken);
+    expect(tokens).not.toContain(c.publicToken);
+  });
+
+  it('"Tuttu" rafı KARNENİN TAMAMINI taşır', async () => {
+    // Yalnızca isabetleri göstermek, kapağın kusursuz olduğu izlenimini
+    // verirdi.
+    const { userId } = await createUser('aslan');
+    const x = await makeEvent();
+    const y = await makeEvent();
+    const idX = await predict(userId, x.eventId, x.byKey.HOME!);
+    const idY = await predict(userId, y.eventId, y.byKey.HOME!);
+
+    await gazetteService.create({
+      ownerId: userId,
+      title: 'İki manşet',
+      predictionIds: [idX, idY],
+      isPublic: true,
+    });
+
+    await db
+      .update(events)
+      .set({ status: 'RESOLVED', resolvedOutcomeId: x.byKey.HOME!, resolvedAt: new Date() })
+      .where(eq(events.id, x.eventId));
+    await db
+      .update(events)
+      .set({ status: 'RESOLVED', resolvedOutcomeId: y.byKey.AWAY!, resolvedAt: new Date() })
+      .where(eq(events.id, y.eventId));
+
+    const hits = await gazetteService.shelfHits();
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.settled).toBe(2);
+    expect(hits[0]!.hits).toBe(1);
+  });
+
+  it('SİLİNMİŞ hesabın kapağı hiçbir rafta görünmez', async () => {
+    const { userId } = await createUser('aslan');
+    const e = await makeEvent();
+    const id = await predict(userId, e.eventId, e.byKey.HOME!);
+    await gazetteService.create({
+      ownerId: userId,
+      title: 'Kapak',
+      predictionIds: [id],
+      isPublic: true,
+    });
+
+    expect(await gazetteService.shelfToday()).toHaveLength(1);
+    await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, userId));
+    expect(await gazetteService.shelfToday()).toHaveLength(0);
   });
 });
