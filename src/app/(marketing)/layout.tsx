@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { currentActor } from '@/server/auth';
+import { triggerMaintenanceAfterResponse } from '@/server/modules/governance/visit-trigger';
 import { ToastProvider } from '@/components/feedback/Toast';
 import { brand } from '@/config';
 
@@ -24,6 +25,20 @@ export default async function MarketingLayout({
   readonly children: React.ReactNode;
 }) {
   const actor = await currentActor();
+
+  /*
+   * BAKIM İŞİ BURADA DA TETİKLENİR.
+   *
+   * Daha önce yalnızca oturum içi kabukta duruyordu ve canlıda şu görüldü:
+   * kurucu bir gün giriş yapmayınca maç çekilmedi, Günün Meydanı seçilmedi
+   * ve ana sayfa boş kaldı — hem de tam olarak siteyi ilk kez gören
+   * ziyaretçiler için. Ürünün en çok dolu görünmesi gereken sayfa, en boş
+   * kalan sayfaydı.
+   *
+   * Ziyaretçi beklemez: iş yanıttan sonra çalışır ve bayat değilse hiç
+   * başlamaz.
+   */
+  triggerMaintenanceAfterResponse();
 
   return (
     <ToastProvider>
