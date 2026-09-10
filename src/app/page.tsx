@@ -84,11 +84,41 @@ export default async function Home() {
    * (merak) → tutanlar (kanıt). Sonuncusu en sondadır çünkü ancak sonuçlar
    * biriktiğinde dolacak.
    */
-  const [shelfToday, shelfResolving, shelfHits] = await Promise.all([
+  const [todayRaw, resolvingRaw, hitsRaw] = await Promise.all([
     gazetteService.shelfToday(),
     gazetteService.shelfResolvingToday(),
     gazetteService.shelfHits(6),
   ]);
+
+  /*
+   * ── BİR KAPAK YALNIZCA BİR RAFTA ────────────────────────────────────────
+   *
+   * Raflar birbirini dışlamıyor: bugün kurulmuş ve bugün sonuçlanacak bir
+   * kapak ikisine birden düşüyordu. Canlıda tek kapak varken sayfa onu ARKA
+   * ARKAYA İKİ KEZ gösterdi.
+   *
+   * Zararı görsel değil: sayfa, olduğundan daha dolu görünüyor. Aynı kapağı
+   * iki kez göstermek, "iki kapak var" izlenimi verir — ve bu, ürünün
+   * başından beri kaçındığı şeyin ta kendisidir: boşluğu doldurma görüntüsü.
+   * Konsensüste yüzde göstermeyi reddederken verdiğimiz kararla aynı karar.
+   *
+   * ÖNCELİK SIRASI rafların değerine göre: bugün sınanacak bir iddia, bugün
+   * kurulmuş olmasından daha ilgi çekicidir; "tuttu" ise zaten geçmişe ait.
+   * Rafı boşalan bölüm hiç çizilmez.
+   */
+  const shown = new Set<string>();
+  function dedupe<T extends { readonly publicToken: string }>(rows: readonly T[]): T[] {
+    return rows.filter((r) => {
+      if (shown.has(r.publicToken)) return false;
+      shown.add(r.publicToken);
+      return true;
+    });
+  }
+
+  const shelfResolving = dedupe(resolvingRaw);
+  const shelfToday = dedupe(todayRaw);
+  const shelfHits = dedupe(hitsRaw);
+
   return (
     <main id="icerik" className="mx-auto w-full max-w-2xl flex-1 px-6 py-16">
       <h1 className="text-ink text-5xl font-bold tracking-tight">{brand.appName}</h1>
