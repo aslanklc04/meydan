@@ -7,6 +7,7 @@ import { gazetteService } from '@/server/modules/gazette/service';
 import type { GazetteHeadline } from '@/server/modules/gazette/service';
 import { log } from '@/server/observability/logger';
 import { ShareBar } from '@/features/gazette/components/ShareBar';
+import { GazetteControls } from '@/features/gazette/components/GazetteControls';
 import { serverEnv } from '@/config/env';
 import { brand } from '@/config';
 import { formatCount } from '@/lib/utils';
@@ -304,6 +305,15 @@ export default async function GazettePage({ params }: Params) {
           </div>
         )}
       </section>
+
+      {/*
+        Bildir / raftan çek. Giriş yapmamış ziyaretçiye GÖSTERİLMEZ: bildirim
+        bir hesaba bağlı olmalı, yoksa aynı kişi bir içeriği sınırsız kez
+        bildirip moderasyon kuyruğunu boğabilir.
+      */}
+      {actor && (
+        <GazetteControls publicToken={token} isOwner={isOwner} isPublic={gazette.isPublic} />
+      )}
     </main>
   );
 }
