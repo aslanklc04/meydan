@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
 import {
   eventOutcomes,
@@ -560,83 +560,116 @@ export const gazetteService = {
   },
 };
 
+/** Ana sayfadaki bir rafta aynı kişiden en çok kaç kapak görünebilir. */
+const PER_OWNER_ON_SHELF = 2;
+
 /**
- * Raf sorgusunun ortak gövdesi.
+ * Raf sorgusunun ortak gövdesi — TEK bir SQL ifadesi.
  *
- * Üç raf da AYNI görünürlük koşullarını uygular ve bu bilerek tek yerde
- * durur: koşullardan biri (gizlenmiş kapak, silinmiş hesap) bir rafta
- * unutulursa, o raf sessizce moderasyonun kapattığı içeriği yayınlar.
- * Tekrarlanan güvenlik koşulu, er ya da geç bir yerde eksik yazılır.
+ * ── NEDEN HAM SQL ──────────────────────────────────────────────────────────
+ * Sorgu üç şeyi birlikte yapmak zorunda: kapak başına toplama (kaç manşet,
+ * kaçı sonuçlandı, kaçı tuttu), sıralama ve KULLANICI İÇİNDE kesme. Sonuncusu
+ * bir pencere fonksiyonu ister ve pencere fonksiyonu toplamadan SONRA
+ * çalışmalıdır; bu da iki katmanlı bir sorgu demektir. Sorgu kurucuyla
+ * yazılabilir ama okunamaz hâle gelir — ve bu sorgunun okunabilir kalması,
+ * güvenlik koşullarının burada durması yüzünden önemlidir.
+ *
+ * ── ÜÇ GÖRÜNÜRLÜK KOŞULU TEK YERDE ─────────────────────────────────────────
+ * Üç raf da aynı koşulları uygular: herkese açık, moderasyonca gizlenmemiş,
+ * sahibi silinmemiş. Her rafa ayrı yazılsaydı biri er ya da geç eksik yazılır
+ * ve o raf sessizce gizlenmiş içeriği yayınlardı.
+ *
+ * ── KİŞİ BAŞINA SINIR ──────────────────────────────────────────────────────
+ * Sınır olmasaydı tek kişi rafı doldururdu ve raf topluluğun değil bir
+ * kişinin görüntüsü olurdu. Kötü niyet gerekmez; hevesli bir kullanıcı da
+ * aynı sonucu üretir.
+ *
+ * SINIRLANAN ŞEY KAPAK SAYISI DEĞİL, RAFTAKİ GÖRÜNÜRLÜKTÜR: kullanıcı
+ * istediği kadar kapak kurar, hepsinin bağlantısı çalışır; ana sayfada
+ * ondan en fazla `PER_OWNER_ON_SHELF` tanesi görünür.
+ *
+ * Kesme SQL'de yapılır, satırları çekip JS'te değil: bir kullanıcının elli
+ * kapağı varsa JS'te kesmek, o elliyi çekip kırk sekizini atmak ve
+ * başkalarına yer kalmaması demektir.
  */
 async function shelf(
   ctx: Ctx,
   opts: {
-    readonly where: ReturnType<typeof eq> | ReturnType<typeof sql> | undefined;
+    readonly where: SQL | undefined;
     readonly order: 'newest' | 'soonest' | 'hits';
     readonly limit: number;
   },
 ): Promise<ShelfEntry[]> {
-  const settledExpr = sql<number>`count(*) FILTER (
-    WHERE ${events.status} = 'RESOLVED' AND ${events.resolvedOutcomeId} IS NOT NULL
-  )::int`;
-  const hitsExpr = sql<number>`count(*) FILTER (
-    WHERE ${events.status} = 'RESOLVED' AND ${events.resolvedOutcomeId} = ${predictions.outcomeId}
-  )::int`;
-  const nextResolvesExpr = sql<Date | null>`min(${events.resolvesAt}) FILTER (
-    WHERE ${events.status} NOT IN ('RESOLVED', 'VOID')
-  )`;
+  const extra = opts.where ? sql` AND ${opts.where}` : sql``;
 
-  const visible = and(
-    eq(gazettes.visibility, 'PUBLIC'),
-    isNull(gazettes.hiddenAt),
-    isNull(users.deletedAt),
-    opts.where,
-  );
-
-  const query = ctx
-    .select({
-      publicToken: gazettes.publicToken,
-      title: gazettes.title,
-      ownerUsername: users.username,
-      publishedDay: gazettes.publishedDay,
-      createdAt: gazettes.createdAt,
-      headlineCount: sql<number>`count(${gazetteItems.id})::int`,
-      settled: settledExpr,
-      hits: hitsExpr,
-      nextResolvesAt: nextResolvesExpr,
-    })
-    .from(gazettes)
-    .innerJoin(users, eq(users.id, gazettes.ownerId))
-    .innerJoin(gazetteItems, eq(gazetteItems.gazetteId, gazettes.id))
-    .innerJoin(predictions, eq(predictions.id, gazetteItems.predictionId))
-    .innerJoin(events, eq(events.id, predictions.eventId))
-    .where(visible)
-    .groupBy(
-      gazettes.id,
-      gazettes.publicToken,
-      gazettes.title,
-      gazettes.publishedDay,
-      gazettes.createdAt,
-      users.username,
-    );
-
-  const ordered =
+  const orderBy =
     opts.order === 'newest'
-      ? query.orderBy(desc(gazettes.createdAt))
+      ? sql`created_at DESC`
       : opts.order === 'soonest'
-        ? query.orderBy(asc(nextResolvesExpr))
-        : query.orderBy(desc(hitsExpr), desc(sql`${hitsExpr}::float / NULLIF(${settledExpr}, 0)`));
+        ? sql`next_resolves_at ASC NULLS LAST`
+        : sql`hits DESC, (hits::float / NULLIF(settled, 0)) DESC, created_at DESC`;
 
-  const rows = await ordered.limit(opts.limit);
+  const rows = await ctx.execute(sql`
+    WITH kapaklar AS (
+      SELECT
+        ${gazettes.publicToken}   AS public_token,
+        ${gazettes.title}         AS title,
+        ${users.username}         AS owner_username,
+        ${gazettes.publishedDay}  AS published_day,
+        ${gazettes.createdAt}     AS created_at,
+        count(${gazetteItems.id})::int AS headline_count,
+        count(*) FILTER (
+          WHERE ${events.status} = 'RESOLVED' AND ${events.resolvedOutcomeId} IS NOT NULL
+        )::int AS settled,
+        count(*) FILTER (
+          WHERE ${events.status} = 'RESOLVED'
+            AND ${events.resolvedOutcomeId} = ${predictions.outcomeId}
+        )::int AS hits,
+        min(${events.resolvesAt}) FILTER (
+          WHERE ${events.status} NOT IN ('RESOLVED', 'VOID')
+        ) AS next_resolves_at
+      FROM ${gazettes}
+      JOIN ${users}         ON ${users.id} = ${gazettes.ownerId}
+      JOIN ${gazetteItems}  ON ${gazetteItems.gazetteId} = ${gazettes.id}
+      JOIN ${predictions}   ON ${predictions.id} = ${gazetteItems.predictionId}
+      JOIN ${events}        ON ${events.id} = ${predictions.eventId}
+      WHERE ${gazettes.visibility} = 'PUBLIC'
+        AND ${gazettes.hiddenAt} IS NULL
+        AND ${users.deletedAt} IS NULL
+        ${extra}
+      GROUP BY ${gazettes.id}, ${gazettes.publicToken}, ${gazettes.title},
+               ${users.username}, ${gazettes.publishedDay}, ${gazettes.createdAt}
+    ),
+    siralanmis AS (
+      SELECT *, row_number() OVER (PARTITION BY owner_username ORDER BY ${orderBy}) AS sira
+      FROM kapaklar
+    )
+    SELECT * FROM siralanmis
+    WHERE sira <= ${PER_OWNER_ON_SHELF}
+    ORDER BY ${orderBy}
+    LIMIT ${opts.limit}
+  `);
 
-  return rows.map((r) => ({
-    publicToken: r.publicToken,
+  return (rows as unknown as ShelfRow[]).map((r) => ({
+    publicToken: r.public_token,
     title: r.title,
-    ownerUsername: r.ownerUsername,
-    publishedDay: r.publishedDay,
-    headlineCount: Number(r.headlineCount),
+    ownerUsername: r.owner_username,
+    publishedDay: r.published_day,
+    headlineCount: Number(r.headline_count),
     settled: Number(r.settled),
     hits: Number(r.hits),
-    nextResolvesAt: r.nextResolvesAt ? new Date(r.nextResolvesAt) : null,
+    nextResolvesAt: r.next_resolves_at ? new Date(r.next_resolves_at) : null,
   }));
 }
+
+/** Ham sorgunun döndürdüğü satır biçimi — sütun adları snake_case. */
+type ShelfRow = {
+  readonly public_token: string;
+  readonly title: string;
+  readonly owner_username: string;
+  readonly published_day: string;
+  readonly headline_count: number | string;
+  readonly settled: number | string;
+  readonly hits: number | string;
+  readonly next_resolves_at: string | Date | null;
+};
