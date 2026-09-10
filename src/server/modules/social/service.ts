@@ -277,7 +277,7 @@ export const socialService = {
 
   async report(input: {
     readonly reporterId: string;
-    readonly targetType: 'USER' | 'PREDICTION' | 'EVENT';
+    readonly targetType: 'USER' | 'PREDICTION' | 'EVENT' | 'GAZETTE';
     readonly targetId: string;
     readonly reason: 'SPAM' | 'ABUSE' | 'IMPERSONATION' | 'CHEATING' | 'OTHER';
     readonly note?: string;
