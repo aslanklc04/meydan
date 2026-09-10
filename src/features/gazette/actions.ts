@@ -46,6 +46,10 @@ export async function createGazetteAction(
       ownerId: actor.id,
       title,
       predictionIds,
+      // İşaretlenmemiş bir onay kutusu forma HİÇ gelmez; bu yüzden yokluk
+      // "gizli" demektir. Varsayılanı burada da açıkça yazmak, formun
+      // biçimi değişirse kuralın sessizce tersine dönmesini engeller.
+      isPublic: formData.get('isPublic') === 'true',
     });
     token = result.publicToken;
   } catch (error) {
@@ -66,4 +70,37 @@ export async function createGazetteAction(
   // `redirect` try bloğunun DIŞINDA: içeride olsaydı kendi kontrol akışı
   // hatası yakalanır ve kullanıcıya "bir sorun oluştu" denirdi.
   redirect(`/g/${token}`);
+}
+
+export type FlowResult = { readonly ok: boolean; readonly message: string };
+
+/**
+ * Sahibi kapağını raftan çeker. TEK YÖNLÜ.
+ *
+ * Manşetler yerinde kalır, bağlantı çalışmaya devam eder; değişen tek şey
+ * sitede listelenmemesidir. Kullanıcı "gizle" derken bir şeyi silmediğini
+ * bilmelidir.
+ */
+export async function makeGazettePrivateAction(publicToken: string): Promise<FlowResult> {
+  try {
+    const actor = await currentActor();
+    if (!actor) throw new AuthenticationError();
+    await gazetteService.makePrivate(publicToken, actor.id);
+    /*
+     * `revalidatePath` ÇAĞRILMAZ (ürün kuralı 32): Server Action içinde
+     * yeniden doğrulama, geçerli rotayı tazeleyip istemci bileşenini
+     * yeniden kuruyor ve onay mesajı kullanıcı görmeden kayboluyor. Kapak
+     * sayfası ve ana sayfa `force-dynamic` olduğu için bir sonraki istekte
+     * zaten güncel gelirler.
+     */
+    return { ok: true, message: 'Kapağın raftan çekildi. Bağlantısı çalışmaya devam ediyor.' };
+  } catch (error) {
+    if (error instanceof DomainError) return { ok: false, message: error.message };
+    log.error(logEvents.unexpectedError, {
+      operation: 'gazette.makePrivate',
+      outcome: 'failure',
+      error,
+    });
+    return { ok: false, message: new InternalError().message };
+  }
 }
