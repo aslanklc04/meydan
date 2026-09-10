@@ -61,14 +61,14 @@ export async function toggleReactionAction(
 }
 
 const reportSchema = z.object({
-  targetType: z.enum(['USER', 'PREDICTION', 'EVENT']),
+  targetType: z.enum(['USER', 'PREDICTION', 'EVENT', 'GAZETTE']),
   targetId: z.string().min(1),
   reason: z.enum(['SPAM', 'ABUSE', 'IMPERSONATION', 'CHEATING', 'OTHER']),
   note: z.string().trim().max(500).optional(),
 });
 
 export async function reportAction(input: {
-  targetType: 'USER' | 'PREDICTION' | 'EVENT';
+  targetType: 'USER' | 'PREDICTION' | 'EVENT' | 'GAZETTE';
   targetId: string;
   reason: 'SPAM' | 'ABUSE' | 'IMPERSONATION' | 'CHEATING' | 'OTHER';
   note?: string;
