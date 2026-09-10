@@ -28,7 +28,36 @@ import { formatCount } from '@/lib/utils';
  * istemcide yapılsaydı, sayfa kaynağına bakan herkes görürdü.
  */
 
-export type DailyOutcome = { readonly id: string; readonly label: string };
+export type DailyOutcome = {
+  readonly id: string;
+  readonly label: string;
+  /** Maçlarda takım arması; "Beraberlik" gibi seçeneklerde null. */
+  readonly imageUrl: string | null;
+};
+
+/**
+ * Arma — yüklenmezse yerine bir şey KONMAZ.
+ *
+ * Kırık görsel simgesi ya da "resim yok" yer tutucusu, hiç görsel
+ * olmamasından kötüdür: kullanıcı bir şeyin bozuk olduğunu düşünür. Sağlayıcı
+ * armayı kaldırırsa düğme sade metne döner ve hiçbir şey kırılmış görünmez.
+ */
+function Badge({ url, label }: { readonly url: string | null; readonly label: string }) {
+  if (!url) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt=""
+      aria-hidden="true"
+      width={40}
+      height={40}
+      loading="lazy"
+      className="h-10 w-10 shrink-0 object-contain"
+      data-team={label}
+    />
+  );
+}
 
 export function DailyMeydan({
   slug,
@@ -77,9 +106,10 @@ export function DailyMeydan({
                 key={outcome.id}
                 type="button"
                 onClick={() => setPicked(outcome)}
-                className="border-border text-ink hover:border-brand focus-visible:outline-ink min-h-13 flex-1 rounded-xl border-2 px-4 text-base font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="border-border text-ink hover:border-brand focus-visible:outline-ink flex min-h-16 flex-1 flex-col items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-base font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
               >
-                {outcome.label}
+                <Badge url={outcome.imageUrl} label={outcome.label} />
+                <span className="text-center leading-tight">{outcome.label}</span>
               </button>
             ))}
           </div>
@@ -94,7 +124,10 @@ export function DailyMeydan({
         <div className="mt-5">
           <div className="border-brand bg-warning-bg rounded-xl border-2 px-4 py-3">
             <p className="text-muted text-xs font-semibold uppercase">Senin tarafın</p>
-            <p className="text-ink mt-1 text-lg font-bold">{picked.label}</p>
+            <div className="mt-1 flex items-center gap-3">
+              <Badge url={picked.imageUrl} label={picked.label} />
+              <p className="text-ink text-lg font-bold">{picked.label}</p>
+            </div>
           </div>
 
           {/*
