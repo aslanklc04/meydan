@@ -107,6 +107,39 @@ describe('sonuçlara ulaşılabilir', () => {
   });
 });
 
+describe('akışta TAHMİN ETMEDİĞİN maçların sonucu', () => {
+  /*
+   * En uzun süre açık kalan kör nokta buydu. Sonuç listesi önce ana sayfaya
+   * ve /sonuclar'a kondu; oysa GİRİŞ YAPMIŞ kullanıcı ana sayfayı görmüyor,
+   * akışta yaşıyor. Akıştan geçen ama tahmin edilmeyen maçın sonucu
+   * kullanıcı için hiçbir yerde yoktu: kapanıyor, açık listeden düşüyor,
+   * kayboluyordu.
+   */
+  const feed = 'src/app/(app)/app/feed/page.tsx';
+
+  it('akış, herkesin sonuçlarını da çeker', () => {
+    expect(codeOnly(feed)).toContain('catalogService.resultsBoard(7, 12)');
+  });
+
+  it('kendi tahminlerin AYIKLANIR — aynı maç iki kez çıkmaz', () => {
+    const code = codeOnly(feed);
+    expect(code).toContain('new Set(results.map((r) => r.eventId))');
+    expect(code).toContain('!mine.has(r.id)');
+  });
+
+  it('bölüm ekranda çiziliyor', () => {
+    const f = flat(feed);
+    expect(f).toContain('Biten meydanlar');
+    expect(f).toContain('Tahmin etmediklerin de dâhil');
+    expect(codeOnly(feed)).toContain('otherResults.map');
+  });
+
+  it('hiç sonuç yoksa bölüm hiç görünmez', () => {
+    // Boş bir "Biten meydanlar" başlığı, akışı ıssız gösterirdi.
+    expect(codeOnly(feed)).toContain('otherResults.length > 0');
+  });
+});
+
 describe('akıştaki kendi sonuçların penceresi', () => {
   it('üç gün değil YEDİ gündür', () => {
     /*
