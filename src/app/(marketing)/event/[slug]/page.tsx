@@ -7,6 +7,7 @@ import { consensusService } from '@/server/modules/catalog/consensus.service';
 import { profileService } from '@/server/modules/social/profile.service';
 import { EventCard } from '@/features/events/components/EventCard';
 import { FinancialDisclaimer } from '@/components/disclaimers/FinancialDisclaimer';
+import { AskAFriend } from '@/features/share/components/AskAFriend';
 import { timeRemaining } from '@/features/predictions/labels';
 import { brand } from '@/config';
 import { formatCount, formatPercent } from '@/lib/utils';
@@ -226,6 +227,21 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
           </p>
         )}
       </section>
+
+      {/* ── Bunu birine sor ──────────────────────────────────────────────
+          Tahmin yapmış kullanıcıya, tahmininden HEMEN SONRA. Paylaşımın
+          değeri "arkadaşım ne demiş" merakında ve o merak ancak ortada bir
+          cevap varken doğar; bu yüzden düğme tahmin sahibine özeldir. */}
+      {actor && event.myOutcomeId && event.isOpen && (
+        <section className="border-border bg-surface mt-6 rounded-xl border p-4">
+          <p className="text-ink text-sm font-semibold">Aynı soruyu birine sor</p>
+          <p className="text-muted mt-1 mb-3 text-xs">
+            Arkadaşın tek dokunuşla cevap verir; senin ne dediğini ancak kendi tahminini yaptıktan
+            sonra görür.
+          </p>
+          <AskAFriend eventId={event.id} question={event.question} />
+        </section>
+      )}
 
       {/* ── Tahmin kartı / davet ── */}
       <section className="mt-6">
