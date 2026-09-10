@@ -45,7 +45,14 @@ export type ConsensusView =
       /** Yalnızca örneklem yeterliyse doldurulur. */
       readonly shares: readonly { readonly outcomeId: string; readonly share: number }[] | null;
       readonly counts: readonly { readonly outcomeId: string; readonly count: number }[];
-      /** Kullanıcının kendi tarafının payı; örneklem yetersizse null. */
+      /** Kullanıcının kendisi dışındaki katılımcı sayısı. */
+      readonly othersTotal: number;
+      /** Kullanıcının kendisi dışındakilerden kaçı onunla aynı tarafta. */
+      readonly othersWithUser: number;
+      /**
+       * DİĞERLERİNİN kullanıcıyla aynı taraftaki payı — kullanıcının kendisi
+       * bu orana DAHİL DEĞİLDİR. Örneklem yetersizse null.
+       */
       readonly userShare: number | null;
       readonly position: 'MINORITY' | 'MAJORITY' | 'SPLIT' | null;
       /** Kapanışta dondurulmuş veriden mi geliyor? */
@@ -130,17 +137,43 @@ export const consensusService = {
       ? counts.map((c) => ({ outcomeId: c.outcomeId, share: c.count / data.total }))
       : null;
 
+    /*
+     * ── KENDİ CEVABINI KALABALIKTAN ÇIKAR ───────────────────────────────────
+     *
+     * Dağılım çubukları HERKESİ sayar — "10 kişiden 4'ü ev sahibi dedi"
+     * etkinlik hakkında bir olgudur ve kullanıcı da o ondan biridir.
+     *
+     * Ama "azınlıktasın / çoğunluktasın" farklı bir cümledir: kullanıcının
+     * DIŞINDAKİLER hakkında bir iddiadır. Kendini de sayarsan kendini kendinle
+     * doğrulamış olursun ve sayı küçüldükçe yanılgı büyür. Uç örnek: tek
+     * tahmin sahibi sensin, kendini sayarsan payın %100 çıkar ve ürün sana
+     * "çoğunluktasın" der — oysa ortada senden başka kimse yoktur.
+     *
+     * Doğru bölen `total - 1`, doğru pay `own - 1`'dir. Kullanıcı verinin
+     * içinde bulunamazsa (silinmiş hesap, donmadan sonra yazılmış kayıt gibi
+     * beklenmedik durumlar) çıkarma yapılmaz; olmayan bir kaydı çıkarmak
+     * sayıyı bozar.
+     */
     const own = data.counts[viewerOutcomeId] ?? 0;
-    const userShare = enough ? own / data.total : null;
+    const viewerCounted = own > 0 && data.total > 0;
+    const othersTotal = viewerCounted ? data.total - 1 : data.total;
+    const othersWithUser = viewerCounted ? own - 1 : own;
+
+    // Yüzde eşiği artık DİĞERLERİNİN sayısına bakar: eşiğin amacı "arkasında
+    // kaç kişi var" sorusuydu ve o kişilerin arasında kullanıcının kendisi yok.
+    const userShare =
+      othersTotal >= socialProof.minSampleForPercentage ? othersWithUser / othersTotal : null;
 
     return {
       revealed: true,
       total: data.total,
       shares,
       counts,
+      othersTotal,
+      othersWithUser,
       userShare,
       position:
-        userShare !== null && data.total >= socialProof.minSampleForPosition
+        userShare !== null && othersTotal >= socialProof.minSampleForPosition
           ? position(userShare)
           : null,
       frozen: frozen !== null,
