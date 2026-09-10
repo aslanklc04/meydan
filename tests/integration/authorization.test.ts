@@ -11,7 +11,7 @@ import { adminService } from '../../src/server/modules/governance/admin.service'
 import { identityService } from '../../src/server/modules/identity/service';
 import { onboardingService } from '../../src/server/modules/identity/onboarding.service';
 import { economy } from '../../src/config';
-import { createEvent, createUser, ensureCategory } from '../factories';
+import { acceptChallenge, createEvent, createUser, ensureCategory } from '../factories';
 
 /**
  * GÜVENLİK DENETİMİ — Faz 5.
@@ -62,7 +62,7 @@ describe('Meydan Okuma yetkilendirmesi (IDOR)', () => {
   it('ÜÇÜNCÜ KİŞİ, başkasına gönderilmiş Meydan Okumayı KABUL EDEMEZ', async () => {
     const { davetsiz, challengeId } = await directChallenge();
 
-    await expect(challengeService.accept(challengeId, davetsiz.userId)).rejects.toThrow(
+    await expect(acceptChallenge(challengeId, davetsiz.userId)).rejects.toThrow(
       /sana gönderilmedi/i,
     );
   });
@@ -89,7 +89,7 @@ describe('Meydan Okuma yetkilendirmesi (IDOR)', () => {
 
   it('OLUŞTURAN kendi Meydan Okumasını kabul edemez', async () => {
     const { emir, challengeId } = await directChallenge();
-    await expect(challengeService.accept(challengeId, emir.userId)).rejects.toThrow(
+    await expect(acceptChallenge(challengeId, emir.userId)).rejects.toThrow(
       /Kendi Meydan Okumanı/i,
     );
   });
