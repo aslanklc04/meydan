@@ -119,6 +119,31 @@ export function GazetteComposer({ items }: { readonly items: readonly ComposerIt
         </ul>
       </fieldset>
 
+      {/*
+        GÖRÜNÜRLÜK TERCİHİ — kutu BOŞ başlar.
+        Serbest yazılmış bir başlığı kullanıcının açık tercihi olmadan
+        herkesin ana sayfasına koymak, ona sormadan adına karar vermektir.
+        Önceden işaretlenmiş bir kutu, sorulmuş sayılmaz.
+      */}
+      <div className="border-border rounded-lg border p-3">
+        <label className="flex cursor-pointer items-start gap-3">
+          <input type="checkbox" name="isPublic" value="true" className="mt-1" />
+          <span className="min-w-0">
+            <span className="text-ink block text-sm font-semibold">
+              Ana sayfadaki raflarda da görünsün
+            </span>
+            <span className="text-muted mt-0.5 block text-xs">
+              İşaretlemezsen kapağın yine kurulur ve bağlantısını istediğine gönderebilirsin —
+              sadece sitede listelenmez. İşaretlersen başlığın ve manşetlerin MEYDAN&apos;a giren
+              herkese görünür.
+            </span>
+            <span className="text-muted mt-1 block text-xs">
+              Raftan sonradan çekebilirsin, ama geri koyamazsın.
+            </span>
+          </span>
+        </label>
+      </div>
+
       {/* Kilit uyarısı GÖNDERMEDEN ÖNCE. */}
       <p className="border-border text-muted rounded-lg border border-dashed px-3 py-2 text-xs">
         <span aria-hidden="true">🔒 </span>
