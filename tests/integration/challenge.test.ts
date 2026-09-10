@@ -7,7 +7,7 @@ import { challengeService } from '../../src/server/modules/challenge/service';
 import { predictionService } from '../../src/server/modules/prediction/service';
 import { coinService } from '../../src/server/modules/economy/service';
 import { economy } from '../../src/config';
-import { createEvent, createUser, forceCloseDeadline } from '../factories';
+import { acceptChallenge, createEvent, createUser, forceCloseDeadline } from '../factories';
 
 const sql = createSql();
 
@@ -109,9 +109,15 @@ describe('doğrudan Meydan Okuma', () => {
     expect(row?.mode).toBe('DIRECT');
     expect(row?.status).toBe('PENDING');
     expect(row?.opponentId).toBe(mert.userId);
-    // ADR-18: sortOrder'daki ilk farklı sonuç = Fenerbahçe
-    expect(row?.opponentOutcomeId).toBe(event.outcomes[1]!.id);
-    expect(row?.creatorOutcomeId).not.toBe(row?.opponentOutcomeId);
+    /*
+     * Karşı taraf OLUŞTURMADA ATANMAZ (göç 0018).
+     *
+     * Eskiden sortOrder'daki ilk farklı sonuç otomatik atanıyordu. Üç sonuçlu
+     * bir maçta bu, kabul edene BERABERLİK'i veriyordu: oluşturan en olası
+     * sonucu seçiyor, kabul eden azınlıkta kalanı alıyordu. Artık taraf,
+     * kabul eden kişinin kararı.
+     */
+    expect(row?.opponentOutcomeId).toBeNull();
   });
 
   it('kabul edilir: karşı taraf OTOMATİK atanır, tekrar seçim istenmez', async () => {
@@ -127,7 +133,7 @@ describe('doğrudan Meydan Okuma', () => {
       opponentUsername: mert.username,
     });
 
-    const { balance } = await challengeService.accept(challengeId, mert.userId);
+    const { balance } = await acceptChallenge(challengeId, mert.userId);
     expect(balance).toBe(economy.initialGrant - 50);
 
     const [row] = await db.select().from(challenges).where(eq(challenges.id, challengeId));
@@ -156,9 +162,7 @@ describe('doğrudan Meydan Okuma', () => {
       opponentUsername: mert.username,
     });
 
-    await expect(challengeService.accept(challengeId, can.userId)).rejects.toThrow(
-      /sana gönderilmedi/i,
-    );
+    await expect(acceptChallenge(challengeId, can.userId)).rejects.toThrow(/sana gönderilmedi/i);
   });
 
   it('kendine Meydan Okunamaz', async () => {
@@ -209,9 +213,7 @@ describe('doğrudan Meydan Okuma', () => {
 
     await sql`UPDATE challenge SET expires_at = now() - interval '1 minute' WHERE id = ${challengeId}`;
 
-    await expect(challengeService.accept(challengeId, mert.userId)).rejects.toThrow(
-      /süresi doldu/i,
-    );
+    await expect(acceptChallenge(challengeId, mert.userId)).rejects.toThrow(/süresi doldu/i);
   });
 
   it('yetersiz bakiyeyle Meydan Okuma açılamaz', async () => {
@@ -261,7 +263,7 @@ describe('Açık Meydan Okuma (ADR-15)', () => {
       stakeAmount: 50,
     });
 
-    await challengeService.accept(challengeId, mert.userId);
+    await acceptChallenge(challengeId, mert.userId);
 
     const [row] = await db.select().from(challenges).where(eq(challenges.id, challengeId));
     expect(row?.status).toBe('ACCEPTED');
@@ -279,7 +281,7 @@ describe('Açık Meydan Okuma (ADR-15)', () => {
       stakeAmount: 50,
     });
 
-    await expect(challengeService.accept(challengeId, emir.userId)).rejects.toThrow(
+    await expect(acceptChallenge(challengeId, emir.userId)).rejects.toThrow(
       /kendi meydan okumanı/i,
     );
   });
@@ -408,7 +410,7 @@ describe('Açık Meydan Okuma (ADR-15)', () => {
       outcomeId: event.outcomes[2]!.id,
     });
 
-    await expect(challengeService.accept(challengeId, mert.userId)).rejects.toThrow(
+    await expect(acceptChallenge(challengeId, mert.userId)).rejects.toThrow(
       /zaten bir tahminin var/i,
     );
   });
@@ -430,11 +432,11 @@ describe('Açık Meydan Okuma (ADR-15)', () => {
     });
 
     const results = await Promise.all([
-      challengeService.accept(challengeId, mert.userId).then(
+      acceptChallenge(challengeId, mert.userId).then(
         () => 'mert',
         () => null,
       ),
-      challengeService.accept(challengeId, can.userId).then(
+      acceptChallenge(challengeId, can.userId).then(
         () => 'can',
         () => null,
       ),
@@ -470,8 +472,8 @@ describe('Açık Meydan Okuma (ADR-15)', () => {
       stakeAmount: 50,
     });
 
-    await challengeService.accept(challengeId, mert.userId);
-    await expect(challengeService.accept(challengeId, can.userId)).rejects.toThrow(
+    await acceptChallenge(challengeId, mert.userId);
+    await expect(acceptChallenge(challengeId, can.userId)).rejects.toThrow(
       /başka bir kullanıcı tarafından kabul edildi/i,
     );
     expect(await coinService.getBalance(can.userId)).toBe(economy.initialGrant);
@@ -499,8 +501,11 @@ describe('karşıt sonuç kuralı', () => {
     ).rejects.toThrow(/challenge_opposing_outcomes/);
   });
 
-  it('iki sonuçlu etkinlikte karşı taraf tek olasılıktır', async () => {
+  it('iki sonuçlu etkinlikte kabul edenin tek seçeneği vardır', async () => {
+    // Fazladan adım kaygısı burada doğmuştu ve burada da çözülüyor: seçenek
+    // tekse arayüz onu hazır işaretler, kullanıcı için akış değişmez.
     const emir = await createUser('emir');
+    const mert = await createUser('mert');
     const event = await createEvent({
       outcomes: [
         { key: 'UP', label: 'Yükseliş' },
@@ -515,7 +520,71 @@ describe('karşıt sonuç kuralı', () => {
       stakeAmount: 50,
     });
 
+    await acceptChallenge(challengeId, mert.userId);
+
     const [row] = await db.select().from(challenges).where(eq(challenges.id, challengeId));
     expect(row?.opponentOutcomeId).toBe(event.outcomes[1]!.id);
+  });
+
+  it('KABUL EDEN kendi tarafını seçer — üç sonuçlu maçta beraberlik dayatılmaz', async () => {
+    /*
+     * Canlıda fark edilen sorun buydu: kurucu açık bir Meydan Okumayı kabul
+     * etti ve kendisine sorulmadan beraberlik tarafı verildi. Üç sonuçlu bir
+     * maçta beraberlik, çoğu zaman en düşük olasılıklı sonuçtur; oluşturanla
+     * kabul edenin pozisyonu eşit olmuyordu.
+     */
+    const emir = await createUser('emir');
+    const mert = await createUser('mert');
+    const event = await createEvent(); // HOME · DRAW · AWAY
+
+    const { challengeId } = await challengeService.create({
+      creatorId: emir.userId,
+      eventId: event.eventId,
+      outcomeId: event.outcomes[0]!.id, // ev sahibi
+      stakeAmount: 50,
+    });
+
+    // Kabul eden DEPLASMANI seçiyor — eski kural ona beraberliği verirdi.
+    await acceptChallenge(challengeId, mert.userId, event.outcomes[2]!.id);
+
+    const [row] = await db.select().from(challenges).where(eq(challenges.id, challengeId));
+    expect(row?.opponentOutcomeId).toBe(event.outcomes[2]!.id);
+    expect(row?.opponentOutcomeId).not.toBe(event.outcomes[1]!.id);
+  });
+
+  it('AYNI tarafı seçmek reddedilir — ortada iddia kalmaz', async () => {
+    const emir = await createUser('emir');
+    const mert = await createUser('mert');
+    const event = await createEvent();
+
+    const { challengeId } = await challengeService.create({
+      creatorId: emir.userId,
+      eventId: event.eventId,
+      outcomeId: event.outcomes[0]!.id,
+      stakeAmount: 50,
+    });
+
+    await expect(acceptChallenge(challengeId, mert.userId, event.outcomes[0]!.id)).rejects.toThrow(
+      /aynı tarafta/i,
+    );
+  });
+
+  it('BAŞKA ETKİNLİĞİN sonucu kabul edilemez', async () => {
+    // Kimlik tek başına aidiyet kanıtı değildir.
+    const emir = await createUser('emir');
+    const mert = await createUser('mert');
+    const event = await createEvent();
+    const other = await createEvent();
+
+    const { challengeId } = await challengeService.create({
+      creatorId: emir.userId,
+      eventId: event.eventId,
+      outcomeId: event.outcomes[0]!.id,
+      stakeAmount: 50,
+    });
+
+    await expect(acceptChallenge(challengeId, mert.userId, other.outcomes[1]!.id)).rejects.toThrow(
+      /Geçersiz seçim/,
+    );
   });
 });
