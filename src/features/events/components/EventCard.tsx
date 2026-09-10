@@ -7,6 +7,7 @@ import { useToast } from '@/components/feedback/Toast';
 import { brand, economy } from '@/config';
 import { FinancialDisclaimer } from '@/components/disclaimers/FinancialDisclaimer';
 import { timeRemaining } from '@/features/predictions/labels';
+import { AskAFriend } from '@/features/share/components/AskAFriend';
 import { challengeAction, predictAction, type FlowResult } from '../actions';
 
 /**
@@ -131,6 +132,24 @@ export function EventCard({
           >
             <span aria-hidden="true">⚔️ </span>BU TAHMİNLE MEYDAN OKU
           </button>
+
+          {/*
+            ── PAYLAŞ, TAHMİNİN YAPILDIĞI YERDE ────────────────────────────
+            Bu kutu önce yalnızca herkese açık etkinlik sayfasındaydı. Ama
+            insanlar tahminlerini AKIŞTA yapıyor ve oradan etkinlik sayfasına
+            hiç geçmiyorlar: düğme vardı, görülmüyordu.
+
+            Kart hem akışta hem etkinlik sayfasında kullanıldığı için burada
+            durması, iki yerde birden görünmesini sağlar — ve iki ayrı yere
+            kopyalanmasını önler.
+
+            Meydan Okuma'nın ALTINDA: o çip ortaya koyar ve karşı taraf
+            gerektirir; bu ise bedava ve tek yönlüdür. Birincil eylem üstte
+            kalır.
+          */}
+          <div className="border-border mt-3 border-t pt-3">
+            <AskAFriend eventId={event.id} question={event.question} />
+          </div>
         </div>
       )}
 
