@@ -28,6 +28,24 @@ export default async function LoginPage({
         <input type="hidden" name="next" value={target} />
         <Field label="E-posta" name="email" type="email" autoComplete="email" />
         <Field label="Parola" name="password" type="password" autoComplete="current-password" />
+
+        {/*
+          BENİ HATIRLA — işaretsiz başlar.
+          İşaretlenmezse oturum bir iş günü kadar sürer; ortak kullanılan bir
+          bilgisayarda bir sonraki kişi hazır açılmış bir hesap bulmamalı.
+          Kutunun ne yaptığı yanında yazılı: "beni hatırla" tek başına ne
+          kadar süre olduğunu söylemez.
+        */}
+        <div className="flex items-start gap-2">
+          <input id="field-remember" name="remember" type="checkbox" className="mt-1" />
+          <label htmlFor="field-remember" className="text-muted text-sm">
+            Beni hatırla
+            <span className="block text-xs">
+              İşaretlemezsen 12 saat sonra tekrar giriş istenir. Ortak bir bilgisayardaysan
+              işaretleme.
+            </span>
+          </label>
+        </div>
       </AuthForm>
 
       <div className="text-muted mt-5 space-y-1 text-sm">
