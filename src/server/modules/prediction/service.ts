@@ -1,4 +1,5 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { db, withTransaction, type Tx } from '@/server/db';
 import { eventOutcomes, events, predictions } from '@/server/db/schema';
 import {
@@ -162,6 +163,86 @@ export const predictionService = {
   },
 
   /** Kullanıcının tahmin geçmişi — profil ve akış için. */
+  /**
+   * SON SONUÇLANANLAR — dönüş döngüsünün kalbi.
+   *
+   * ── NEDEN BU SORGU VAR ─────────────────────────────────────────────────
+   * Kullanıcı tahminini yapıyor, maç oynanıyor, sonuç geliyor — ve akışta
+   * hiçbir şey değişmiyordu. Ürünün kullanıcıya verdiği tek söz "sonucu
+   * göreceksin"di ve o söz, sonucun görüneceği bir yer olmadığı için
+   * tutulmuyordu.
+   *
+   * Yol haritasındaki ana ölçü de tam olarak bu ana bağlı: sonucun hazır
+   * olmasından sonraki 72 saatte kaç kişi sonucu görüp YENİ bir tahmin
+   * yapıyor. Ölçülecek davranışın gerçekleşeceği ekran önce var olmalı.
+   *
+   * PENCERE bilinçli: sonsuza kadar geriye gitmez. Üç gün önce sonuçlanmış
+   * bir tahmini akışın tepesinde tutmak, ekranı geçmişle doldurur ve asıl
+   * eylemi — yeni tahmin — aşağı iter.
+   */
+  async recentResults(userId: string, hours = 72, limit = 5, ctx: Ctx = db) {
+    const since = new Date(Date.now() - hours * 3600_000);
+    const resultOutcome = alias(eventOutcomes, 'result_outcome');
+
+    const rows = await ctx
+      .select({
+        predictionId: predictions.id,
+        result: predictions.result,
+        resolvedAt: predictions.resolvedAt,
+        stakeAmount: predictions.stakeAmount,
+        eventId: events.id,
+        eventSlug: events.slug,
+        eventTitle: events.title,
+        eventQuestion: events.question,
+        myOutcomeLabel: eventOutcomes.label,
+        resolvedOutcomeLabel: resultOutcome.label,
+      })
+      .from(predictions)
+      .innerJoin(events, eq(events.id, predictions.eventId))
+      .innerJoin(eventOutcomes, eq(eventOutcomes.id, predictions.outcomeId))
+      /*
+       * `leftJoin`: iptal edilmiş etkinlikte kazanan sonuç YOKTUR. `innerJoin`
+       * olsaydı iptaller listeden sessizce düşerdi — oysa kullanıcı çipinin
+       * neden iade edildiğini görmek zorunda.
+       */
+      .leftJoin(resultOutcome, eq(resultOutcome.id, events.resolvedOutcomeId))
+      .where(
+        and(
+          eq(predictions.userId, userId),
+          inArray(predictions.status, ['RESOLVED', 'VOID']),
+          gte(predictions.resolvedAt, since),
+        ),
+      )
+      .orderBy(sql`${predictions.resolvedAt} DESC`)
+      .limit(limit);
+
+    return rows.map((r) => ({
+      ...r,
+      /*
+       * `correct` ÜÇ DEĞERLİDİR: doğru, yanlış ve "sayılmadı". İptal edilen
+       * etkinliği "tutmadı" saymak, kimsenin hatası olmayan bir şeyden
+       * kullanıcıyı sorumlu tutmak olurdu.
+       */
+      correct: r.result === 'CORRECT' ? true : r.result === 'INCORRECT' ? false : null,
+    }));
+  },
+
+  /**
+   * Kullanıcının bir etkinlikteki tahmini — DURUMDAN BAĞIMSIZ.
+   *
+   * `findActiveForUserEvent` yalnızca açık tahminleri döner ve paylaşım
+   * bağlantısı üretmek için yetmez: asıl paylaşılası an sonucun geldiği
+   * andır ve o tahmin artık "açık" değildir.
+   */
+  async findAnyForUserEvent(userId: string, eventId: string, ctx: Ctx = db) {
+    const rows = await ctx
+      .select({ id: predictions.id })
+      .from(predictions)
+      .where(and(eq(predictions.userId, userId), eq(predictions.eventId, eventId)))
+      .limit(1);
+    return rows[0];
+  },
+
   async listForUser(userId: string, limit = 20, ctx: Ctx = db) {
     return ctx
       .select({
