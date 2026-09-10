@@ -52,29 +52,44 @@ export default async function MarketingLayout({
               {brand.appName}
             </Link>
 
-            {actor ? (
+            {/*
+              SONUÇLAR — public kabuğun her sayfasından ulaşılabilir.
+              Bir etkinlik sayfasına düşen ziyaretçinin "peki dün ne oldu"
+              sorusuna gidecek bir yeri yoktu; sonuç listesi vardı ama
+              ulaşılamıyordu. Ulaşılamayan ekran, yazılmamış ekrandır.
+            */}
+            <div className="flex items-center gap-3">
               <Link
-                href="/app/feed"
-                className="text-brand focus-visible:outline-ink flex min-h-11 items-center text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
+                href="/sonuclar"
+                className="text-ink focus-visible:outline-ink flex min-h-11 items-center text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
               >
-                Akışıma dön
+                Sonuçlar
               </Link>
-            ) : (
-              <div className="flex items-center gap-3 text-sm">
+
+              {actor ? (
                 <Link
-                  href="/login"
-                  className="text-ink focus-visible:outline-ink flex min-h-11 items-center font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
+                  href="/app/feed"
+                  className="text-brand focus-visible:outline-ink flex min-h-11 items-center text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
                 >
-                  Giriş yap
+                  Akışıma dön
                 </Link>
-                <Link
-                  href="/register"
-                  className="bg-brand text-brand-fg focus-visible:outline-ink flex min-h-11 items-center rounded-lg px-3 font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
-                >
-                  Katıl
-                </Link>
-              </div>
-            )}
+              ) : (
+                <div className="flex items-center gap-3 text-sm">
+                  <Link
+                    href="/login"
+                    className="text-ink focus-visible:outline-ink flex min-h-11 items-center font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
+                  >
+                    Giriş yap
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="bg-brand text-brand-fg focus-visible:outline-ink flex min-h-11 items-center rounded-lg px-3 font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
+                  >
+                    Katıl
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
