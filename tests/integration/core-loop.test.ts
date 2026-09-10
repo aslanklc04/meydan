@@ -14,7 +14,7 @@ import { notificationService } from '../../src/server/modules/social/notificatio
 import { auditService } from '../../src/server/modules/governance/audit.service';
 import { jobsService } from '../../src/server/modules/governance/jobs.service';
 import { economy, rating } from '../../src/config';
-import { acceptChallenge, createEvent, createUser } from '../factories';
+import { acceptChallenge, createEvent, createUser, forceCloseDeadline } from '../factories';
 
 /**
  * ÇEKİRDEK DÖNGÜ — GERÇEK PostgreSQL ÜZERİNDE UÇTAN UCA (Faz 6).
@@ -588,5 +588,107 @@ describe('TRANSACTION GERİ ALMA', () => {
 
     expect((await reputationService.getSummary(emir.userId)).completed).toBe(0);
     await assertLedgerBalanced();
+  });
+});
+
+describe('sonuç anı akışta görünür', () => {
+  it('SONUÇLANAN tahmin son sonuçlar listesinde çıkar', async () => {
+    /*
+     * Ürünün kullanıcıya verdiği tek söz "sonucu göreceksin"di ve akışta o
+     * sözün tutulduğu bir yer yoktu. Yol haritasındaki ana ölçü de bu ana
+     * bağlı: sonucu görüp yeni tahmin yapma oranı. Ölçülecek davranışın
+     * gerçekleşeceği ekran önce var olmalı.
+     */
+    const emir = await createUser('emir');
+    const event = await createEvent();
+
+    await predictionService.create({
+      userId: emir.userId,
+      eventId: event.eventId,
+      outcomeId: event.outcomes[0]!.id,
+    });
+
+    await forceCloseDeadline(event.eventId);
+    await resolutionService.resolve({
+      eventId: event.eventId,
+      outcomeId: event.outcomes[0]!.id,
+      decision: 'RESOLVED',
+      resolvedById: emir.userId,
+    });
+
+    const results = await predictionService.recentResults(emir.userId);
+    expect(results).toHaveLength(1);
+    expect(results[0]!.correct).toBe(true);
+    expect(results[0]!.myOutcomeLabel).toBe(event.outcomes[0]!.label);
+    expect(results[0]!.resolvedOutcomeLabel).toBe(event.outcomes[0]!.label);
+  });
+
+  it('TUTMAYAN tahmin de listede kalır', async () => {
+    // Yalnızca doğru bilinenleri göstermek, kullanıcıya kendi karnesinin
+    // yarısını saklamak olurdu.
+    const emir = await createUser('emir');
+    const event = await createEvent();
+
+    await predictionService.create({
+      userId: emir.userId,
+      eventId: event.eventId,
+      outcomeId: event.outcomes[0]!.id,
+    });
+    await forceCloseDeadline(event.eventId);
+    await resolutionService.resolve({
+      eventId: event.eventId,
+      outcomeId: event.outcomes[1]!.id,
+      decision: 'RESOLVED',
+      resolvedById: emir.userId,
+    });
+
+    const results = await predictionService.recentResults(emir.userId);
+    expect(results[0]!.correct).toBe(false);
+    expect(results[0]!.resolvedOutcomeLabel).toBe(event.outcomes[1]!.label);
+  });
+
+  it('İPTAL edilen etkinlik "tutmadı" SAYILMAZ', async () => {
+    // Kimsenin hatası olmayan bir şeyden kullanıcıyı sorumlu tutmak yanlış.
+    const emir = await createUser('emir');
+    const event = await createEvent();
+
+    await predictionService.create({
+      userId: emir.userId,
+      eventId: event.eventId,
+      outcomeId: event.outcomes[0]!.id,
+    });
+    await forceCloseDeadline(event.eventId);
+    await resolutionService.resolve({
+      eventId: event.eventId,
+      outcomeId: null,
+      decision: 'VOID',
+      resolvedById: emir.userId,
+    });
+
+    const results = await predictionService.recentResults(emir.userId);
+    expect(results).toHaveLength(1);
+    expect(results[0]!.correct).toBeNull();
+    expect(results[0]!.resolvedOutcomeLabel).toBeNull();
+  });
+
+  it('PENCERE DIŞINDA kalan sonuç akışın tepesini doldurmaz', async () => {
+    const emir = await createUser('emir');
+    const event = await createEvent();
+
+    await predictionService.create({
+      userId: emir.userId,
+      eventId: event.eventId,
+      outcomeId: event.outcomes[0]!.id,
+    });
+    await forceCloseDeadline(event.eventId);
+    await resolutionService.resolve({
+      eventId: event.eventId,
+      outcomeId: event.outcomes[0]!.id,
+      decision: 'RESOLVED',
+      resolvedById: emir.userId,
+    });
+
+    // Sıfır saatlik pencere: hiçbir şey düşmemeli.
+    expect(await predictionService.recentResults(emir.userId, 0)).toHaveLength(0);
   });
 });
