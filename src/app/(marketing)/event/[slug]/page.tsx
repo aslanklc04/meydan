@@ -132,10 +132,22 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
               return (
                 <li key={o.id} className="border-border rounded-lg border px-3 py-3">
                   <div className="flex items-baseline justify-between text-sm">
-                    <span className="text-ink font-medium">
+                    <span className="text-ink flex items-center gap-2 font-medium">
+                      {o.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={o.imageUrl}
+                          alt=""
+                          aria-hidden="true"
+                          width={24}
+                          height={24}
+                          loading="lazy"
+                          className="h-6 w-6 shrink-0 object-contain"
+                        />
+                      )}
                       {o.label}
                       {o.id === event.myOutcomeId && (
-                        <span className="text-brand ml-2 text-xs">senin tahminin</span>
+                        <span className="text-brand text-xs">senin tahminin</span>
                       )}
                     </span>
                     <span className="text-ink font-bold">
@@ -158,10 +170,22 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
               return (
                 <li key={o.id} className="border-border rounded-lg border px-3 py-3">
                   <div className="flex items-baseline justify-between text-sm">
-                    <span className="text-ink font-medium">
+                    <span className="text-ink flex items-center gap-2 font-medium">
+                      {o.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={o.imageUrl}
+                          alt=""
+                          aria-hidden="true"
+                          width={24}
+                          height={24}
+                          loading="lazy"
+                          className="h-6 w-6 shrink-0 object-contain"
+                        />
+                      )}
                       {o.label}
                       {o.id === event.myOutcomeId && (
-                        <span className="text-brand ml-2 text-xs">senin tahminin</span>
+                        <span className="text-brand text-xs">senin tahminin</span>
                       )}
                     </span>
                     <span className="text-ink font-bold">{formatPercent(share)}</span>
