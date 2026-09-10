@@ -15,7 +15,8 @@ import {
   NotFoundError,
   isUniqueViolation,
 } from '@/server/errors';
-import { productDay } from '@/config/time';
+import { checkPublicText, verdictMessage } from '@/server/content/text-guard';
+import { PRODUCT_TIMEZONE, productDay } from '@/config/time';
 
 /** Transaction ya da havuz — servis her ikisiyle de çalışır. */
 type Ctx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
@@ -92,6 +93,21 @@ export type GazetteView = {
   readonly settled: number;
   readonly hits: number;
   readonly viewCount: number;
+  /** Ana sayfadaki raflarda görünüyor mu — sahibine gösterilir. */
+  readonly isPublic: boolean;
+};
+
+/** Raf satırı — listelerde gösterilen özet. Tam kapak için `byToken`. */
+export type ShelfEntry = {
+  readonly publicToken: string;
+  readonly title: string;
+  readonly ownerUsername: string;
+  readonly publishedDay: string;
+  readonly headlineCount: number;
+  readonly settled: number;
+  readonly hits: number;
+  /** En erken sonuçlanacak manşetin zamanı; hepsi sonuçlandıysa null. */
+  readonly nextResolvesAt: Date | null;
 };
 
 /**
@@ -150,6 +166,7 @@ export const gazetteService = {
     readonly ownerId: string;
     readonly title: string;
     readonly predictionIds: readonly string[];
+    readonly isPublic?: boolean;
     readonly now?: Date;
   }): Promise<{ readonly publicToken: string }> {
     const now = input.now ?? new Date();
@@ -162,6 +179,25 @@ export const gazetteService = {
       throw new BusinessRuleError(
         'GAZETTE_TITLE_TOO_LONG',
         `Başlık en çok ${MAX_TITLE} karakter olabilir.`,
+        'title',
+      );
+    }
+
+    /*
+     * ── METİN SÜZGECİ HER KAPAKTA ÇALIŞIR, YALNIZ AÇIK OLANLARDA DEĞİL ──────
+     *
+     * "Nasılsa gizli" demek yanlış olurdu: kapak gizli olsa bile bağlantısı
+     * paylaşılır ve başkasının ekranında açılır. Süzgecin sorusu "kim görecek"
+     * değil, "bu metin bana ait olmayan bir ekranda belirecek mi"dir.
+     *
+     * Süzgeç bir çözüm değil hız kesicidir; asıl savunma şikâyet yolu ve
+     * yönetici gizlemesidir (bkz. text-guard.ts).
+     */
+    const verdict = checkPublicText(title);
+    if (!verdict.ok) {
+      throw new BusinessRuleError(
+        'GAZETTE_TITLE_REJECTED',
+        verdictMessage(verdict.reason),
         'title',
       );
     }
@@ -213,6 +249,7 @@ export const gazetteService = {
           ownerId: input.ownerId,
           title,
           publishedDay: productDay(now),
+          visibility: input.isPublic === true ? 'PUBLIC' : 'PRIVATE',
         })
         .returning({ id: gazettes.id });
 
@@ -255,6 +292,8 @@ export const gazetteService = {
         publishedDay: gazettes.publishedDay,
         createdAt: gazettes.createdAt,
         viewCount: gazettes.viewCount,
+        visibility: gazettes.visibility,
+        hiddenAt: gazettes.hiddenAt,
         ownerUsername: users.username,
         ownerDeletedAt: users.deletedAt,
       })
@@ -266,6 +305,16 @@ export const gazetteService = {
     const gazette = rows[0];
     // Hesabını silmiş kullanıcının gazetesi de yayından kalkar.
     if (!gazette || gazette.ownerDeletedAt !== null) return null;
+
+    /*
+     * MODERASYON GİZLEMESİ BAĞLANTIYI DA KAPATIR.
+     *
+     * Yalnızca raftan düşürseydik gizleme bir gösteriden ibaret olurdu:
+     * şikâyet edilen içerik, asıl yayıldığı yerde — paylaşıldığı sohbette —
+     * okunmaya devam ederdi. Gizlemenin bir anlamı olacaksa her yerde
+     * olmalıdır.
+     */
+    if (gazette.hiddenAt !== null) return null;
 
     const items = await ctx
       .select({
@@ -350,6 +399,7 @@ export const gazetteService = {
       settled,
       hits,
       viewCount: gazette.viewCount,
+      isPublic: gazette.visibility === 'PUBLIC',
     };
   },
 
@@ -362,11 +412,50 @@ export const gazetteService = {
         publishedDay: gazettes.publishedDay,
         viewCount: gazettes.viewCount,
         signupCount: gazettes.signupCount,
+        visibility: gazettes.visibility,
+        hiddenAt: gazettes.hiddenAt,
       })
       .from(gazettes)
       .where(eq(gazettes.ownerId, ownerId))
       .orderBy(desc(gazettes.createdAt))
       .limit(limit);
+  },
+
+  /**
+   * Sahibi kapağını raftan çeker. TEK YÖNLÜDÜR — geri açılamaz.
+   *
+   * Kullanıcının fikrini değiştirme hakkı vardır; ama "aç, tutmazsa gizle,
+   * tutarsa yeniden aç" serbest olsaydı raf gerçeği değil herkesin en iyi
+   * gününü gösterirdi. Bu yüzden kapı tek yönlüdür ve kullanıcıya
+   * gizlemeden ÖNCE böyle olduğu söylenir.
+   *
+   * Son sözü veritabanı söyler: `gazette_visibility_one_way` kısıtı,
+   * `made_private_at` dolmuşken PUBLIC yazılmasını reddeder.
+   */
+  async makePrivate(publicToken: string, ownerId: string, ctx: Ctx = db): Promise<void> {
+    const updated = await ctx
+      .update(gazettes)
+      .set({ visibility: 'PRIVATE', madePrivateAt: new Date() })
+      .where(and(eq(gazettes.publicToken, publicToken), eq(gazettes.ownerId, ownerId)))
+      .returning({ id: gazettes.id });
+
+    if (!updated[0]) throw new NotFoundError('Gazete bulunamadı.');
+  },
+
+  /**
+   * Yönetici gizlemesi — şikâyet üzerine.
+   *
+   * Kapak hem raftan hem BAĞLANTIDAN düşer. Kim gizlediği yazılır: bir
+   * moderasyon kararının sahibi olmalıdır, yoksa hesabı sorulamaz.
+   */
+  async hideByModerator(publicToken: string, moderatorId: string, ctx: Ctx = db): Promise<void> {
+    const updated = await ctx
+      .update(gazettes)
+      .set({ hiddenAt: new Date(), hiddenById: moderatorId })
+      .where(and(eq(gazettes.publicToken, publicToken), isNull(gazettes.hiddenAt)))
+      .returning({ id: gazettes.id });
+
+    if (!updated[0]) throw new NotFoundError('Gazete bulunamadı ya da zaten gizli.');
   },
 
   /**
@@ -401,4 +490,153 @@ export const gazetteService = {
     if (!rows[0]) throw new NotFoundError('Gazete bulunamadı.');
     if (rows[0].ownerId !== userId) throw new NotFoundError('Gazete bulunamadı.');
   },
+
+  // ── RAFLAR ──────────────────────────────────────────────────────────────
+
+  /**
+   * 1. BUGÜN KURULAN KAPAKLAR — yeniden eskiye.
+   *
+   * Hiçbir sıralama mantığı yoktur ve bu bir eksiklik değil, bir tercihtir:
+   * kurcalanacak bir ölçüt yoksa kurcalanamaz. Üç kullanıcıyla da çalışır,
+   * üç bin kullanıcıyla da.
+   */
+  async shelfToday(now: Date = new Date(), limit = 12, ctx: Ctx = db): Promise<ShelfEntry[]> {
+    return shelf(ctx, {
+      where: eq(gazettes.publishedDay, productDay(now)),
+      order: 'newest',
+      limit,
+    });
+  },
+
+  /**
+   * 2. SONUCU BUGÜN BELLİ OLACAK KAPAKLAR.
+   *
+   * Ürünün vaadinin ödendiği an burasıdır: bir iddia bugün sınanacak. Her
+   * gün siteye dönmek için gerçek bir sebep verir ve zamanla İLGİNÇLEŞEN
+   * tek içerik türüdür — bir kapak kurulduğu gün merak, sonuçlandığı gün
+   * cevap taşır.
+   *
+   * Ölçüt, kapağın kurulduğu gün değil MANŞETİN sonuçlanma zamanıdır.
+   */
+  async shelfResolvingToday(
+    now: Date = new Date(),
+    limit = 12,
+    ctx: Ctx = db,
+  ): Promise<ShelfEntry[]> {
+    const day = productDay(now);
+    return shelf(ctx, {
+      where: sql`EXISTS (
+        SELECT 1 FROM ${gazetteItems}
+        JOIN ${predictions} ON ${predictions.id} = ${gazetteItems.predictionId}
+        JOIN ${events} ON ${events.id} = ${predictions.eventId}
+        WHERE ${gazetteItems.gazetteId} = ${gazettes.id}
+          AND ${events.status} NOT IN ('RESOLVED', 'VOID')
+          AND (${events.resolvesAt} AT TIME ZONE ${PRODUCT_TIMEZONE})::date = ${day}::date
+      )`,
+      order: 'soonest',
+      limit,
+    });
+  },
+
+  /**
+   * 3. TUTTU — sonuçlandıktan SONRA, isabete göre.
+   *
+   * Bu, "en çok beğeni alan"ın dürüst karşılığıdır. Beğeni sonuçtan ÖNCE
+   * toplanır; yani beğeni sıralaması "kim iyi tahmin ediyor"u değil "kimin
+   * çok arkadaşı var"ı ölçer ve kullanıcıyı dürüst tahmin yerine iddialı
+   * tahmin yazmaya iter. Burada sıralamayı yapan tek şey haklı çıkmaktır.
+   *
+   * Sıra: önce isabet sayısı, sonra oran, sonra yenilik. Yalnızca orana
+   * bakılsaydı tek manşetli ve şanslı bir kapak, üç manşetin ikisini bilen
+   * kapağın önüne geçerdi.
+   *
+   * Kapağın TAM KARNESİ döner (settled ve hits birlikte); arayüz "3'ten
+   * 2'si" yazar. Yalnızca isabetleri göstermek, kapağın kusursuz olduğu
+   * izlenimini verirdi.
+   */
+  async shelfHits(limit = 12, ctx: Ctx = db): Promise<ShelfEntry[]> {
+    const rows = await shelf(ctx, { where: undefined, order: 'hits', limit: limit * 3 });
+    return rows.filter((r) => r.settled > 0 && r.hits > 0).slice(0, limit);
+  },
 };
+
+/**
+ * Raf sorgusunun ortak gövdesi.
+ *
+ * Üç raf da AYNI görünürlük koşullarını uygular ve bu bilerek tek yerde
+ * durur: koşullardan biri (gizlenmiş kapak, silinmiş hesap) bir rafta
+ * unutulursa, o raf sessizce moderasyonun kapattığı içeriği yayınlar.
+ * Tekrarlanan güvenlik koşulu, er ya da geç bir yerde eksik yazılır.
+ */
+async function shelf(
+  ctx: Ctx,
+  opts: {
+    readonly where: ReturnType<typeof eq> | ReturnType<typeof sql> | undefined;
+    readonly order: 'newest' | 'soonest' | 'hits';
+    readonly limit: number;
+  },
+): Promise<ShelfEntry[]> {
+  const settledExpr = sql<number>`count(*) FILTER (
+    WHERE ${events.status} = 'RESOLVED' AND ${events.resolvedOutcomeId} IS NOT NULL
+  )::int`;
+  const hitsExpr = sql<number>`count(*) FILTER (
+    WHERE ${events.status} = 'RESOLVED' AND ${events.resolvedOutcomeId} = ${predictions.outcomeId}
+  )::int`;
+  const nextResolvesExpr = sql<Date | null>`min(${events.resolvesAt}) FILTER (
+    WHERE ${events.status} NOT IN ('RESOLVED', 'VOID')
+  )`;
+
+  const visible = and(
+    eq(gazettes.visibility, 'PUBLIC'),
+    isNull(gazettes.hiddenAt),
+    isNull(users.deletedAt),
+    opts.where,
+  );
+
+  const query = ctx
+    .select({
+      publicToken: gazettes.publicToken,
+      title: gazettes.title,
+      ownerUsername: users.username,
+      publishedDay: gazettes.publishedDay,
+      createdAt: gazettes.createdAt,
+      headlineCount: sql<number>`count(${gazetteItems.id})::int`,
+      settled: settledExpr,
+      hits: hitsExpr,
+      nextResolvesAt: nextResolvesExpr,
+    })
+    .from(gazettes)
+    .innerJoin(users, eq(users.id, gazettes.ownerId))
+    .innerJoin(gazetteItems, eq(gazetteItems.gazetteId, gazettes.id))
+    .innerJoin(predictions, eq(predictions.id, gazetteItems.predictionId))
+    .innerJoin(events, eq(events.id, predictions.eventId))
+    .where(visible)
+    .groupBy(
+      gazettes.id,
+      gazettes.publicToken,
+      gazettes.title,
+      gazettes.publishedDay,
+      gazettes.createdAt,
+      users.username,
+    );
+
+  const ordered =
+    opts.order === 'newest'
+      ? query.orderBy(desc(gazettes.createdAt))
+      : opts.order === 'soonest'
+        ? query.orderBy(asc(nextResolvesExpr))
+        : query.orderBy(desc(hitsExpr), desc(sql`${hitsExpr}::float / NULLIF(${settledExpr}, 0)`));
+
+  const rows = await ordered.limit(opts.limit);
+
+  return rows.map((r) => ({
+    publicToken: r.publicToken,
+    title: r.title,
+    ownerUsername: r.ownerUsername,
+    publishedDay: r.publishedDay,
+    headlineCount: Number(r.headlineCount),
+    settled: Number(r.settled),
+    hits: Number(r.hits),
+    nextResolvesAt: r.nextResolvesAt ? new Date(r.nextResolvesAt) : null,
+  }));
+}
