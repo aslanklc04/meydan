@@ -9,7 +9,7 @@ import { resolutionService } from '../../src/server/modules/resolution/service';
 import { reputationService } from '../../src/server/modules/reputation/service';
 import { coinService } from '../../src/server/modules/economy/service';
 import { economy, rating } from '../../src/config';
-import { createEvent, createUser } from '../factories';
+import { acceptChallenge, createEvent, createUser } from '../factories';
 
 const sql = createSql();
 
@@ -40,7 +40,7 @@ async function setupChallenge(stake = 50) {
     stakeAmount: stake,
     opponentUsername: mert.username,
   });
-  await challengeService.accept(challengeId, mert.userId);
+  await acceptChallenge(challengeId, mert.userId);
 
   return { emir, mert, admin, event, challengeId, stake };
 }
