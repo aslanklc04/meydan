@@ -18,6 +18,20 @@ import { describe, expect, it } from 'vitest';
 const root = join(__dirname, '..', '..');
 const read = (p: string) => readFileSync(join(root, p), 'utf8');
 
+/**
+ * YORUMSUZ KAYNAK.
+ *
+ * "Şu ifade kodda GEÇMEMELİ" biçimindeki testler, kaynağın YORUMLARINDA aynı
+ * ifade geçtiği için üç kez kendi kendine takıldı — çünkü bir kuralı
+ * anlatan yorum, doğal olarak kuralın yasakladığı kelimeyi içerir. Yasak
+ * KODA aittir; açıklamaya değil.
+ */
+const codeOnly = (p: string) =>
+  read(p)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+
 const publicPage = read('src/app/(marketing)/g/[token]/page.tsx');
 const ogImage = read('src/app/(marketing)/g/[token]/kapak/route.tsx');
 const composer = read('src/features/gazette/components/GazetteComposer.tsx');
@@ -56,8 +70,9 @@ describe('kilit uyarısı gönderimden ÖNCE', () => {
 
   it('kurma ekranındaki sınır bir GÜVENLİK ÖNLEMİ olarak sunulmaz', () => {
     // İstemcideki sayaç kapatılabilir; kuralın sunucuda olduğu yazılı kalmalı.
-    const withoutComments = composer.replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(withoutComments).not.toContain('güvenlik');
+    expect(codeOnly('src/features/gazette/components/GazetteComposer.tsx')).not.toContain(
+      'güvenlik',
+    );
   });
 });
 
@@ -74,5 +89,51 @@ describe('atıf sayacı kimseyi isimlendirmez', () => {
     expect(actions).toContain('countSignup');
     // Bir ilişki tablosu yazılmıyor: yalnızca sayaç artırılıyor.
     expect(actions).not.toMatch(/referredBy|referrerId|invitedBy/);
+  });
+});
+
+describe('sahibin kendi kapağını görmesi', () => {
+  const page = read('src/app/(marketing)/g/[token]/page.tsx');
+
+  it('sahibine "gazeteni kur" DEMEZ, paylaşma aracı verir', () => {
+    // Canlıda görülen hata: kullanıcı kapağını yeni kurmuş, ona bakıyor ve
+    // ürün ondan kapak kurmasını istiyordu.
+    expect(page).toContain('isOwner');
+    expect(page).toContain('ShareBar');
+    expect(page).toContain('Gazeten hazır');
+  });
+
+  it('sahiplik İÇ KİMLİKLE değil kullanıcı adıyla belirlenir', () => {
+    // Sayfaya `ownerId` taşımak, hiçbir işe yaramayan bir iç kimliği
+    // herkesin okuyabileceği HTML'e koymak olurdu.
+    expect(page).toContain('actor.username === gazette.ownerUsername');
+    expect(codeOnly('src/app/(marketing)/g/[token]/page.tsx')).not.toContain('ownerId');
+  });
+
+  it('SAHİBİN KENDİ ziyareti sayaca EKLENMEZ', () => {
+    // Sayılsaydı "12 kişi baktı" aslında "12 kez sen baktın" olurdu.
+    expect(page).toMatch(/if\s*\(!isOwner\)\s*\{[\s\S]{0,200}countView/);
+  });
+});
+
+describe('paylaş çubuğu', () => {
+  const bar = read('src/features/gazette/components/ShareBar.tsx');
+
+  it('tek bir tarayıcı arayüzüne bağlı DEĞİL', () => {
+    // Kullanıcının tarayıcısı bilinmiyor; üç kademeli geri düşüş şart.
+    expect(bar).toContain('navigator.share');
+    expect(bar).toContain('navigator.clipboard');
+    // Üçüncü kademe her zaman ekranda: salt okunur adres kutusu.
+    expect(bar).toContain('readOnly');
+  });
+
+  it('paylaşılan adres MUTLAKTIR', () => {
+    // Göreli bir `/g/...` WhatsApp'a yapıştırıldığında bağlantı olmaz, düz
+    // metin olur.
+    expect(read('src/app/(marketing)/g/[token]/page.tsx')).toContain('serverEnv.APP_URL');
+  });
+
+  it('paylaşım bağlantılarında İZLEME parametresi YOK', () => {
+    expect(bar).not.toMatch(/utm_|fbclid|gclid/);
   });
 });
