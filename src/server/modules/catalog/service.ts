@@ -16,6 +16,8 @@ export type FeedOutcome = {
   readonly id: string;
   readonly label: string;
   readonly predictionCount: number;
+  /** Maçlarda takım arması; diğer seçeneklerde null. */
+  readonly imageUrl: string | null;
 };
 
 export type FeedEvent = {
@@ -46,6 +48,7 @@ async function attachOutcomes(rows: { id: string }[], ctx: Ctx) {
       label: eventOutcomes.label,
       sortOrder: eventOutcomes.sortOrder,
       predictionCount: eventOutcomes.predictionCount,
+      imageUrl: eventOutcomes.imageUrl,
     })
     .from(eventOutcomes)
     .where(inArray(eventOutcomes.eventId, ids))
@@ -54,7 +57,12 @@ async function attachOutcomes(rows: { id: string }[], ctx: Ctx) {
   const map = new Map<string, FeedOutcome[]>();
   for (const o of outcomeRows) {
     const list = map.get(o.eventId) ?? [];
-    list.push({ id: o.id, label: o.label, predictionCount: o.predictionCount });
+    list.push({
+      id: o.id,
+      label: o.label,
+      predictionCount: o.predictionCount,
+      imageUrl: o.imageUrl,
+    });
     map.set(o.eventId, list);
   }
   return map;
@@ -207,6 +215,7 @@ export const catalogService = {
         label: eventOutcomes.label,
         sortOrder: eventOutcomes.sortOrder,
         predictionCount: eventOutcomes.predictionCount,
+        imageUrl: eventOutcomes.imageUrl,
       })
       .from(eventOutcomes)
       .where(eq(eventOutcomes.eventId, row.id))
@@ -233,6 +242,7 @@ export const catalogService = {
         id: o.id,
         label: o.label,
         predictionCount: o.predictionCount,
+        imageUrl: o.imageUrl,
         // Toplam sıfırken pay da sıfırdır; 0/0 hesabı yapılmaz.
         share: total === 0 ? 0 : o.predictionCount / total,
       })),
@@ -308,7 +318,7 @@ export const catalogService = {
     readonly slug: string;
     readonly closesAt: Date;
     readonly resolvesAt: Date;
-    readonly outcomes: readonly { key: string; label: string }[];
+    readonly outcomes: readonly { key: string; label: string; imageUrl?: string | null }[];
     readonly createdById: string;
     readonly status?: 'DRAFT' | 'OPEN';
   }) {
@@ -348,6 +358,7 @@ export const catalogService = {
           key: o.key,
           label: o.label,
           sortOrder: i,
+          imageUrl: o.imageUrl ?? null,
         })),
       );
 
