@@ -12,6 +12,7 @@ import { ToastProvider } from '@/components/feedback/Toast';
  */
 const SECTIONS = [
   { href: '/admin', label: 'Özet' },
+  { href: '/admin/analytics', label: 'Ölçüm' },
   { href: '/admin/events', label: 'Etkinlikler' },
   { href: '/admin/users', label: 'Kullanıcılar' },
   { href: '/admin/challenges', label: 'Meydan Okumalar' },
