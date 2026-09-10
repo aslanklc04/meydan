@@ -3,6 +3,8 @@ import { brand, economy, rating } from '@/config';
 import { FinancialDisclaimer } from '@/components/disclaimers/FinancialDisclaimer';
 import { featuredService } from '@/server/modules/catalog/featured.service';
 import { consensusService } from '@/server/modules/catalog/consensus.service';
+import { catalogService } from '@/server/modules/catalog/service';
+import { formatCount } from '@/lib/utils';
 import { DailyMeydan } from '@/features/daily/components/DailyMeydan';
 import { timeRemaining } from '@/features/predictions/labels';
 
@@ -49,6 +51,20 @@ export default async function Home() {
    */
   const consensus = featured ? await consensusService.view(featured.id, null) : null;
   const outcomes = featured ? await consensusService.outcomesOf(featured.id) : [];
+
+  /*
+   * BUGÜN AÇIK OLANLAR — ziyaretçi ürünün yaşadığını görsün.
+   *
+   * Ana sayfada tek bir soru varken site "kurulmuş ama kimse yok" hissi
+   * verir. Burada gösterilenler GERÇEK açık etkinliklerdir; sahte sayı,
+   * sahte etkinlik ya da doldurma içerik yok. Hiç yoksa bölüm hiç
+   * görünmez — boş bir liste göstermek, hiç göstermemekten kötüdür.
+   *
+   * Günün Meydanı listeden çıkarılır: hemen yukarıda zaten duruyor.
+   */
+  const openEvents = (await catalogService.listOpenEvents(null, 7))
+    .filter((e) => e.id !== featured?.id)
+    .slice(0, 6);
   return (
     <main id="icerik" className="mx-auto w-full max-w-2xl flex-1 px-6 py-16">
       <h1 className="text-ink text-5xl font-bold tracking-tight">{brand.appName}</h1>
@@ -63,7 +79,7 @@ export default async function Home() {
             slug={featured.slug}
             title={featured.title}
             question={featured.question}
-            outcomes={outcomes.map((o) => ({ id: o.id, label: o.label }))}
+            outcomes={outcomes.map((o) => ({ id: o.id, label: o.label, imageUrl: o.imageUrl }))}
             total={consensus?.total ?? 0}
             closesInLabel={timeRemaining(featured.closesAt)}
             categoryIcon={featured.categoryIcon}
@@ -76,6 +92,63 @@ export default async function Home() {
           )}
         </div>
       ) : null}
+
+      {openEvents.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-ink text-lg font-bold">
+            <span aria-hidden="true">⚡ </span>
+            Şu an açık olanlar
+          </h2>
+          <p className="text-muted mt-1 text-sm">
+            Tahminler kapanmadan tarafını seç. Sonucu birlikte göreceğiz.
+          </p>
+
+          <ul className="mt-4 space-y-2">
+            {openEvents.map((e) => (
+              <li key={e.id}>
+                <Link
+                  href={`/event/${e.slug}`}
+                  className="border-border hover:border-brand focus-visible:outline-ink flex items-center gap-3 rounded-xl border px-4 py-3 focus-visible:outline-2 focus-visible:outline-offset-2"
+                >
+                  <div className="flex shrink-0 -space-x-2">
+                    {e.outcomes
+                      .filter((o) => o.imageUrl)
+                      .slice(0, 2)
+                      .map((o) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={o.id}
+                          src={o.imageUrl!}
+                          alt=""
+                          aria-hidden="true"
+                          width={28}
+                          height={28}
+                          loading="lazy"
+                          className="bg-background h-7 w-7 rounded-full object-contain"
+                        />
+                      ))}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-ink truncate text-sm font-semibold">{e.title}</p>
+                    <p className="text-muted truncate text-xs">
+                      <span aria-hidden="true">{e.categoryIcon} </span>
+                      {e.categoryName}
+                      <span aria-hidden="true"> · </span>
+                      Kapanmasına {timeRemaining(e.closesAt)}
+                      {e.predictionCount > 0 && (
+                        <>
+                          <span aria-hidden="true"> · </span>
+                          {formatCount(e.predictionCount)} tahmin
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* ── Ön kapı ─────────────────────────────────────────────────────── */}
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
