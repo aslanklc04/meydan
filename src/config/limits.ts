@@ -52,6 +52,13 @@ export const rateLimits = {
   'prediction.create': { limit: scaled(30), windowSec: HOUR, by: 'user' },
   'challenge.create': { limit: scaled(20), windowSec: HOUR, by: 'user' },
   'comment.create': { limit: scaled(20), windowSec: HOUR, by: 'user' },
+  /*
+   * Gazete kurmak sıradan bir yazma değildir: her kapak KALICI ve HERKESE
+   * AÇIK bir adres üretir. Günde 10, gerçek kullanımın çok üstünde (bir
+   * kişinin günde on ayrı iddia kapağı kurması beklenmez) ama otomatik adres
+   * üretimini engelleyecek kadar dar.
+   */
+  'gazette.create': { limit: scaled(10), windowSec: DAY, by: 'user' },
   'reaction.toggle': { limit: scaled(200), windowSec: HOUR, by: 'user' },
   'follow.toggle': { limit: scaled(100), windowSec: DAY, by: 'user' },
 
