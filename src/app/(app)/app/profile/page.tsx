@@ -163,15 +163,30 @@ export default async function ProfilePage() {
         >
           İlgi alanlarını düzenle
         </Link>
+      </div>
+
+      {/*
+        HESAP bölümü ayrı bir başlık altında. Önceden çıkış düğmesi, diğer
+        bağlantıların arasında ve soluk renkte duruyordu; kullanıcı bulamadı.
+        Aynı görünüme sahip düğmeler arasında duran bir eylem, aranmadığı
+        sürece görünmez.
+      */}
+      <section aria-labelledby="hesap-baslik" className="border-border mt-6 border-t pt-5">
+        <h2 id="hesap-baslik" className="text-ink text-base font-bold">
+          Hesap
+        </h2>
+        <p className="text-muted mt-1 mb-3 text-sm">
+          Oturumun bu tarayıcıda açık. Ortak bir bilgisayardaysan çıkış yapmayı unutma.
+        </p>
         <form action={logoutAction}>
           <button
             type="submit"
-            className="border-border text-muted min-h-12 w-full rounded-lg border text-sm"
+            className="border-border text-ink focus-visible:outline-ink min-h-12 w-full rounded-lg border text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
           >
-            Çıkış yap
+            <span aria-hidden="true">⏻ </span>Oturumu kapat
           </button>
         </form>
-      </div>
+      </section>
     </main>
   );
 }
