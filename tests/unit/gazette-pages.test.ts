@@ -228,3 +228,29 @@ describe('bakım işi HERKESİN ziyaretiyle tetiklenir', () => {
     );
   });
 });
+
+describe('bir kapak yalnızca bir rafta', () => {
+  const homepage = read('src/app/page.tsx');
+
+  it('raflar arasında tekilleştirme YAPILIYOR', () => {
+    /*
+     * Canlıda görülen: tek kapak varken ana sayfa onu arka arkaya İKİ KEZ
+     * gösterdi — hem "bugün kurulanlar" hem "sonucu bugün belli olacak"
+     * rafında. Zararı görsel değil: sayfa olduğundan dolu görünüyor ve bu,
+     * ürünün başından beri kaçındığı şeyin ta kendisi.
+     */
+    expect(homepage).toContain('const shown = new Set<string>()');
+    expect(homepage).toContain('dedupe(resolvingRaw)');
+    expect(homepage).toContain('dedupe(todayRaw)');
+    expect(homepage).toContain('dedupe(hitsRaw)');
+  });
+
+  it('öncelik SIRASI rafların değerine göre', () => {
+    // Bugün sınanacak bir iddia, bugün kurulmuş olmasından daha ilgi çekici.
+    const order = ['dedupe(resolvingRaw)', 'dedupe(todayRaw)', 'dedupe(hitsRaw)'].map((k) =>
+      homepage.indexOf(k),
+    );
+    expect(order[0]).toBeLessThan(order[1]!);
+    expect(order[1]).toBeLessThan(order[2]!);
+  });
+});
