@@ -26,8 +26,26 @@ export default async function ChallengesPage() {
     challengeService.listOpen(actor.id),
   ]);
 
+  /*
+   * ── ÜÇ AYRI DURUM, ÜÇ AYRI SEKME ──────────────────────────────────────
+   *
+   * `mine` artık kullanıcının TARAF OLDUĞU her Meydan Okumayı içeriyor:
+   * açtıkları ve KABUL ETTİKLERİ. Önceden yalnızca açtıklarına bakılıyordu
+   * ve kabul edilen bir Meydan Okuma hiçbir sekmede görünmüyordu — kullanıcı
+   * çipini ortaya koyup nereye gittiğini göremiyordu.
+   *
+   * Ayrım, kullanıcının o an NE BEKLEDİĞİNE göre yapılır:
+   *   • gönderdiklerim → karşı taraf cevap versin
+   *   • sürüyor        → iki taraf da hazır, SONUÇ bekleniyor
+   *   • tamamlananlar  → bitti
+   *
+   * "Sürüyor" ile "tamamlananlar"ı ayırmak şart: kabul edilmiş ama henüz
+   * sonuçlanmamış bir Meydan Okumayı "tamamlandı" diye göstermek, olmamış
+   * bir şeyi olmuş gibi söylemektir.
+   */
   const sent = mine.filter((c) => c.status === 'PENDING' && c.creatorId === actor.id);
-  const done = mine.filter((c) => c.status !== 'PENDING');
+  const active = mine.filter((c) => c.status === 'ACCEPTED');
+  const done = mine.filter((c) => c.status !== 'PENDING' && c.status !== 'ACCEPTED');
 
   const card = (c: (typeof incoming)[number], kind: 'incoming' | 'open' | 'mine') => (
     <ChallengeCard
@@ -41,6 +59,7 @@ export default async function ChallengesPage() {
         eventQuestion: c.eventQuestion,
         creatorOutcomeLabel: c.creatorOutcomeLabel,
         yourOutcomeLabel: c.opponentOutcomeLabel,
+        options: c.options,
         stakeAmount: c.stakeAmount,
         expiresAt: c.expiresAt.toISOString(),
       }}
@@ -76,6 +95,38 @@ export default async function ChallengesPage() {
                 />
               ) : (
                 <div className="space-y-3">{sent.map((c) => card(c, 'mine'))}</div>
+              ),
+          },
+          {
+            key: 'SÜRÜYOR',
+            content:
+              active.length === 0 ? (
+                <EmptyState
+                  title="Süren bir Meydan Okuman yok."
+                  hint="Kabul ettiğin ve sana kabul edilen Meydan Okumalar, sonuç gelene kadar burada durur."
+                />
+              ) : (
+                <ul className="space-y-2">
+                  {active.map((c) => (
+                    <li key={c.id} className="border-border rounded-lg border px-3 py-3 text-sm">
+                      <p className="text-ink font-medium">{c.eventTitle}</p>
+                      <p className="text-muted mt-1">{c.eventQuestion}</p>
+                      <p className="text-muted mt-1">
+                        {/* Kullanıcı hangi tarafta olduğunu görmeli: kendi
+                            tahmini, karşısındakinin adı ve ortaya konan çip. */}
+                        Senin tarafın:{' '}
+                        <strong className="text-ink">
+                          {c.creatorId === actor.id
+                            ? c.creatorOutcomeLabel
+                            : c.opponentOutcomeLabel}
+                        </strong>
+                      </p>
+                      <p className="text-muted mt-1">
+                        {c.stakeAmount} {brand.currencyName} ortada · sonuç bekleniyor
+                      </p>
+                    </li>
+                  ))}
+                </ul>
               ),
           },
           {
