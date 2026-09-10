@@ -18,10 +18,19 @@ export const metadata: Metadata = {
 export default async function RegisterPage({
   searchParams,
 }: {
-  readonly searchParams: Promise<{ next?: string }>;
+  readonly searchParams: Promise<{ next?: string; ref?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, ref } = await searchParams;
   const target = safeNext(next);
+
+  /*
+   * ATIF JETONU. Bir Gelecek Gazetesi bağlantısından gelen kişinin hangi
+   * kapaktan geldiğini yalnızca SAYMAK için taşınır — kim olduğu değil, kaç
+   * kişi geldiği. Biçimi burada süzülür: jeton `base64url` alfabesindedir,
+   * başka bir şey gelirse hiç taşınmaz. Böylece bu alan, form üzerinden
+   * sunucuya rastgele metin sokmanın bir yolu olmaz.
+   */
+  const refToken = typeof ref === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(ref) ? ref : null;
 
   return (
     <>
@@ -29,6 +38,7 @@ export default async function RegisterPage({
       <p className="text-muted mt-1 mb-5 text-sm">{brand.tagline}</p>
 
       <AuthForm action={registerAction} submitLabel="Meydana Katıl">
+        {refToken && <input type="hidden" name="ref" value={refToken} />}
         <Field
           label="Kullanıcı adı"
           name="username"
