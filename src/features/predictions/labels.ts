@@ -35,9 +35,17 @@ export function resultTone(result: string | null): 'correct' | 'incorrect' | 'ne
   return 'neutral';
 }
 
-/** "4 saat", "12 dakika" — kapanışa kalan süre. */
-export function timeRemaining(closesAt: Date, now: Date = new Date()): string {
-  const ms = closesAt.getTime() - now.getTime();
+/**
+ * "4 saat", "12 dakika" — kapanışa kalan süre.
+ *
+ * `timeAgo` ile aynı sebeple metin de kabul eder: bu değerlerden biri
+ * (gazete rafındaki `next_resolves_at`) hesaplanmış bir sütundan gelir.
+ */
+export function timeRemaining(closesAt: Date | string | number, now: Date = new Date()): string {
+  const at = closesAt instanceof Date ? closesAt : new Date(closesAt);
+  if (Number.isNaN(at.getTime())) return '';
+
+  const ms = at.getTime() - now.getTime();
   if (ms <= 0) return 'Kapandı';
 
   const minutes = Math.floor(ms / 60_000);
@@ -84,9 +92,26 @@ export const notificationIcon: Record<string, string> = {
   SEASON_RESULT: '📅',
 };
 
-/** "3 dakika önce", "2 gün önce" — bildirim listesi için. */
-export function timeAgo(date: Date, now: Date = new Date()): string {
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+/**
+ * "3 dakika önce", "2 gün önce" — bildirim listesi için.
+ *
+ * ── NEDEN METİN DE KABUL EDİYOR ────────────────────────────────────────────
+ * Hesaplanmış bir SQL sütunu (`coalesce`, `min`, `max`…) sürücünün tarih
+ * dönüştürücüsünden geçmez ve geriye METİN döner. Bu fonksiyon yalnızca
+ * `Date` kabul ettiği için canlıda `date.getTime is not a function` hatası
+ * verdi ve ANA SAYFA TAMAMEN AÇILMADI.
+ *
+ * Asıl düzeltme kaynakta yapıldı (servis artık `Date` döndürüyor). Buradaki
+ * hoşgörü ikinci savunma hattıdır: bir tarih biçimlendiricisinin bütün
+ * sayfayı düşürmesi, hatanın kendisinden çok daha pahalıdır. Geçersiz bir
+ * değerde patlamak yerine boş metin döner — eksik bir satır, beyaz bir
+ * ekrandan iyidir.
+ */
+export function timeAgo(date: Date | string | number, now: Date = new Date()): string {
+  const at = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(at.getTime())) return '';
+
+  const seconds = Math.floor((now.getTime() - at.getTime()) / 1000);
   if (seconds < 60) return 'az önce';
 
   const minutes = Math.floor(seconds / 60);
