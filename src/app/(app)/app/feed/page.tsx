@@ -8,6 +8,7 @@ import { reputationService } from '@/server/modules/reputation/service';
 import { coinService } from '@/server/modules/economy/service';
 import { socialService } from '@/server/modules/social/service';
 import { onboardingService } from '@/server/modules/identity/onboarding.service';
+import { gazetteService } from '@/server/modules/gazette/service';
 import { EventCard } from '@/features/events/components/EventCard';
 import { ChallengeCard } from '@/features/challenges/components/ChallengeCard';
 import { EmptyState } from '@/components/feedback/EmptyState';
@@ -43,16 +44,18 @@ export default async function FeedPage({
   const { akis } = await searchParams;
   const interests = await onboardingService.interestCategoryIds(actor.id);
 
-  const [events, incoming, open, rating, balance, social] = await Promise.all([
+  const [events, incoming, open, rating, balance, social, gazetteEligible] = await Promise.all([
     catalogService.listOpenEvents(actor.id, 20, undefined, interests),
     challengeService.listIncoming(actor.id),
     challengeService.listOpen(actor.id),
     reputationService.getSummary(actor.id),
     coinService.getBalance(actor.id),
     socialService.feed(actor.id, akis ? { limit: 10, cursor: akis } : { limit: 10 }),
+    gazetteService.eligible(actor.id),
   ]);
 
   const isNewUser = rating.completed === 0;
+  const gazetteReady = gazetteEligible.length;
 
   return (
     <main className="space-y-6">
@@ -74,6 +77,30 @@ export default async function FeedPage({
           <p className="text-foreground mt-2 text-sm">
             Aşağıdan bir sonuç seç, tahminini yap. İstersen aynı tahminle birine Meydan Oku.
           </p>
+        </section>
+      )}
+
+      {/*
+        GAZETE ÇAĞRISI — yalnızca kurabilecek kişiye gösterilir.
+        Hiç açık tahmini olmayan birine "gazeteni kur" demek, tıklayınca boş
+        bir ekrana götürmek olurdu. Bu yüzden ölçüt "tahmin yapmış olmak"
+        değil, TAM OLARAK "şu an kapağa konabilecek tahmini olmak"tır.
+      */}
+      {gazetteReady > 0 && (
+        <section className="border-border bg-surface rounded-xl border p-4">
+          <p className="text-ink text-base font-semibold">
+            <span aria-hidden="true">📰 </span>Gelecek Gazeteni kur
+          </p>
+          <p className="text-muted mt-1 text-sm">
+            {formatCount(gazetteReady)} açık tahminin var. En çok üçünü bir kapakta topla, paylaş —
+            arkadaşların sonucu görmek için geri gelir.
+          </p>
+          <Link
+            href="/app/gazete/yeni"
+            className="bg-brand text-brand-fg focus-visible:outline-ink mt-3 inline-flex min-h-11 items-center rounded-lg px-4 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
+          >
+            Kapağımı kur
+          </Link>
         </section>
       )}
 
