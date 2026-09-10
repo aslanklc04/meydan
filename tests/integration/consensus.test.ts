@@ -100,7 +100,72 @@ describe('önce sen söyle', () => {
 
     expect(view.total).toBe(50);
     expect(view.shares).not.toBeNull();
-    expect(view.userShare).toBeCloseTo(0.8, 5);
+    // Kendisi hariç: 49 kişiden 39'u aynı tarafta.
+    expect(view.userShare).toBeCloseTo(39 / 49, 5);
+  });
+});
+
+describe('kendi cevabını kalabalıktan çıkarma', () => {
+  it('TEK tahmin sahibi kendisiyse "çoğunluktasın" DEMEZ', async () => {
+    // En keskin örnek: ortada senden başka kimse yok. Kendini sayarsan payın
+    // %100 çıkar ve ürün sana kendi cevabını kalabalık diye geri satar.
+    const { eventId, byKey } = await seedEvent({ HOME: 1 });
+    const view = await consensusService.view(eventId, byKey.HOME!);
+    if (!view.revealed) throw new Error('açılmalıydı');
+
+    expect(view.total).toBe(1);
+    expect(view.othersTotal).toBe(0);
+    expect(view.othersWithUser).toBe(0);
+    expect(view.userShare).toBeNull();
+    expect(view.position).toBeNull();
+  });
+
+  it('kullanıcının kendisi "diğerleri" sayısına DAHİL DEĞİLDİR', async () => {
+    const { eventId, byKey } = await seedEvent({ HOME: 12, AWAY: 8 });
+    const view = await consensusService.view(eventId, byKey.HOME!);
+    if (!view.revealed) throw new Error('açılmalıydı');
+
+    expect(view.total).toBe(20); // çubuklar herkesi sayar — bu bir olgudur
+    expect(view.othersTotal).toBe(19); // iddia ise kendisi hariç kurulur
+    expect(view.othersWithUser).toBe(11);
+    expect(view.userShare).toBeCloseTo(11 / 19, 5);
+  });
+
+  it('dağılım çubukları kullanıcıyı çıkarmaz — toplamları tutmalı', async () => {
+    // Kendini çubuklardan da çıkarsaydık yüzdeler toplamı %100 etmez ve
+    // "20 kişi tahmin yaptı" yazısıyla çelişirdi.
+    const { eventId, byKey } = await seedEvent({ HOME: 12, AWAY: 8 });
+    const view = await consensusService.view(eventId, byKey.HOME!);
+    if (!view.revealed) throw new Error('açılmalıydı');
+
+    const sum = (view.shares ?? []).reduce((acc, s) => acc + s.share, 0);
+    expect(sum).toBeCloseTo(1, 5);
+    const counted = view.counts.reduce((acc, c) => acc + c.count, 0);
+    expect(counted).toBe(view.total);
+  });
+
+  it('kendini çıkarınca ÇOĞUNLUK iddiası düşebilir', async () => {
+    // 11 HOME / 10 AWAY: kendini sayarsan payın %52, "çoğunluktasın".
+    // Kendini çıkarınca 10/20 = %50 — eşiğin üstünde değil, artık başa baş.
+    const { eventId, byKey } = await seedEvent({ HOME: 11, AWAY: 10 });
+    const view = await consensusService.view(eventId, byKey.HOME!);
+    if (!view.revealed) throw new Error('açılmalıydı');
+
+    expect(view.userShare).toBeCloseTo(0.5, 5);
+    expect(view.position).toBe('SPLIT');
+  });
+
+  it('yüzde eşiği DİĞERLERİNİN sayısına bakar', async () => {
+    // Toplam tam eşikte ama kullanıcı çıkarılınca eşiğin altına düşüyor.
+    const n = socialProof.minSampleForPercentage;
+    const { eventId, byKey } = await seedEvent({ HOME: n - 3, AWAY: 3 });
+    const view = await consensusService.view(eventId, byKey.HOME!);
+    if (!view.revealed) throw new Error('açılmalıydı');
+
+    expect(view.total).toBe(n);
+    expect(view.othersTotal).toBe(n - 1);
+    expect(view.userShare).toBeNull();
+    expect(view.position).toBeNull();
   });
 });
 
@@ -170,7 +235,7 @@ describe('dondurulmuş konsensüs', () => {
     await consensusService.freeze(eventId);
     const before = await consensusService.view(eventId, byKey.AWAY!);
     if (!before.revealed) throw new Error('açılmalıydı');
-    expect(before.userShare).toBeCloseTo(0.2, 5);
+    expect(before.userShare).toBeCloseTo(9 / 49, 5);
     expect(before.frozen).toBe(true);
 
     // Kapanıştan sonra 100 kişi daha AWAY dese bile paylaşılmış kart değişmez.
@@ -184,7 +249,7 @@ describe('dondurulmuş konsensüs', () => {
     const after = await consensusService.view(eventId, byKey.AWAY!);
     if (!after.revealed) throw new Error('açılmalıydı');
     expect(after.total).toBe(50);
-    expect(after.userShare).toBeCloseTo(0.2, 5);
+    expect(after.userShare).toBeCloseTo(9 / 49, 5);
   });
 
   it('İDEMPOTENT: ikinci dondurma geçmişi EZMEZ', async () => {
