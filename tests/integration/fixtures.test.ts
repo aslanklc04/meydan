@@ -52,18 +52,36 @@ async function makeAdmin(): Promise<string> {
 }
 
 /** TheSportsDB yanıtını taklit eder; uca göre farklı liste döndürür. */
-function stubApi(byEndpoint: { next?: unknown[]; past?: unknown[]; lookup?: unknown[] }): {
+function stubApi(byEndpoint: {
+  next?: unknown[];
+  past?: unknown[];
+  lookup?: unknown[];
+  /** Hafta ucu: hafta numarasına göre liste. */
+  rounds?: Record<string, unknown[]>;
+  /** Tekil sorgu: maç kimliğine göre kayıt. Verilirse `lookup` yerine geçer. */
+  byId?: Record<string, unknown>;
+}): {
   calls: string[];
 } {
   const calls: string[] = [];
   vi.stubGlobal('fetch', async (url: string) => {
     const address = String(url);
     calls.push(address);
-    const list = address.includes('eventsnextleague')
-      ? byEndpoint.next
-      : address.includes('eventspastleague')
-        ? byEndpoint.past
-        : byEndpoint.lookup;
+
+    let list: unknown[] | undefined;
+    if (address.includes('eventsnextleague')) {
+      list = byEndpoint.next;
+    } else if (address.includes('eventspastleague')) {
+      list = byEndpoint.past;
+    } else if (address.includes('eventsround')) {
+      const round = new URL(address).searchParams.get('r') ?? '';
+      list = byEndpoint.rounds?.[round];
+    } else {
+      const id = new URL(address).searchParams.get('id') ?? '';
+      const single = byEndpoint.byId?.[id];
+      list = single ? [single] : byEndpoint.lookup;
+    }
+
     return {
       ok: true,
       status: 200,
@@ -550,5 +568,177 @@ describe('eski etkinliklere arma tamamlama', () => {
       .from(eventOutcomes)
       .where(eq(eventOutcomes.eventId, rows[0]!.id));
     expect(Object.fromEntries(outcomes.map((o) => [o.key, o.label])).HOME).toBe('Eski Ad');
+  });
+});
+
+describe('hafta keşfi — az maç sorununun çözümü', () => {
+  it('"yaklaşanlar" ucu TEK maç verse de haftanın tamamını getirir', async () => {
+    // Canlıda ölçülen durum buydu: ücretsiz anahtarla lig başına 1 maç.
+    // Yedi lig = yedi maç. Hafta ucu ise haftanın tamamını veriyor.
+    await makeAdmin();
+    stubApi({
+      next: [
+        {
+          idEvent: '5001',
+          strHomeTeam: 'Beşiktaş',
+          strAwayTeam: 'Erzurumspor',
+          strTimestamp: future(24),
+          intRound: '5',
+          strSeason: '2026-2027',
+        },
+      ],
+      rounds: {
+        '5': [{ idEvent: '5001' }, { idEvent: '5002' }, { idEvent: '5003' }, { idEvent: '5004' }],
+      },
+      byId: {
+        '5002': {
+          idEvent: '5002',
+          strHomeTeam: 'Konyaspor',
+          strAwayTeam: 'Trabzonspor',
+          strTimestamp: future(26),
+        },
+        '5003': {
+          idEvent: '5003',
+          strHomeTeam: 'Galatasaray',
+          strAwayTeam: 'Kocaelispor',
+          strTimestamp: future(28),
+        },
+        '5004': {
+          idEvent: '5004',
+          strHomeTeam: 'Alanyaspor',
+          strAwayTeam: 'Göztepe',
+          strTimestamp: future(30),
+        },
+      },
+    });
+
+    const result = await fixturesService.importUpcoming();
+    expect(result.imported).toBe(4); // 1 yaklaşan + 3 haftadan
+    const all = await db.select().from(events);
+    expect(all).toHaveLength(4);
+  });
+
+  it('SAAT hafta ucundan DEĞİL tekil sorgudan alınır', async () => {
+    // Ölçüldü: aynı maç için hafta ucu "13 Eylül 12:00", tekil sorgu
+    // "11 Eylül 17:00" diyor. Kapanış saati maçın başlangıcıdır; yanlış saat
+    // ya maç başladıktan sonra tahmin alır ya da iki gün erken kapatır.
+    await makeAdmin();
+    const dogruSaat = future(40);
+
+    stubApi({
+      next: [
+        {
+          idEvent: '6001',
+          strHomeTeam: 'A',
+          strAwayTeam: 'B',
+          strTimestamp: future(20),
+          intRound: '3',
+          strSeason: '2026-2027',
+        },
+      ],
+      rounds: {
+        '3': [
+          { idEvent: '6001' },
+          // Hafta ucu bu maç için YER TUTUCU saat veriyor.
+          { idEvent: '6002', strHomeTeam: 'C', strAwayTeam: 'D', strTimestamp: future(999) },
+        ],
+      },
+      byId: {
+        '6002': { idEvent: '6002', strHomeTeam: 'C', strAwayTeam: 'D', strTimestamp: dogruSaat },
+      },
+    });
+
+    await fixturesService.importUpcoming();
+
+    const rows = await db.select().from(events).where(eq(events.slug, 'mac-6002'));
+    expect(rows).toHaveLength(1);
+    // Kapanış, tekil sorgudaki saat olmalı — hafta ucundaki değil.
+    expect(rows[0]!.closesAt.toISOString().slice(0, 16)).toBe(
+      new Date(`${dogruSaat}Z`).toISOString().slice(0, 16),
+    );
+  });
+
+  it('SEZON ya da HAFTA yoksa hafta keşfi YAPILMAZ — uydurulmaz', async () => {
+    // Uydurulan bir sezon dizgisi boş yanıt döndürür ve istek bütçesini
+    // boşa harcar.
+    await makeAdmin();
+    const { calls } = stubApi({
+      next: [
+        {
+          idEvent: '7001',
+          strHomeTeam: 'A',
+          strAwayTeam: 'B',
+          strTimestamp: future(20),
+          // intRound ve strSeason YOK.
+        },
+      ],
+    });
+
+    await fixturesService.importUpcoming();
+    expect(calls.some((c) => c.includes('eventsround'))).toBe(false);
+  });
+
+  it('SİSTEMDE OLAN maç için tekil sorgu YAPILMAZ — bütçe boşa gitmez', async () => {
+    await makeAdmin();
+    const stub = {
+      next: [
+        {
+          idEvent: '8001',
+          strHomeTeam: 'A',
+          strAwayTeam: 'B',
+          strTimestamp: future(20),
+          intRound: '2',
+          strSeason: '2026-2027',
+        },
+      ],
+      rounds: { '2': [{ idEvent: '8001' }] },
+    };
+
+    stubApi(stub);
+    await fixturesService.importUpcoming();
+
+    // İkinci koşu: maç artık sistemde.
+    vi.unstubAllGlobals();
+    const { calls } = stubApi(stub);
+    await fixturesService.importUpcoming();
+
+    expect(calls.some((c) => c.includes('lookupevent'))).toBe(false);
+  });
+
+  it('İSTEK BÜTÇESİ aşılmaz — sağlayıcı kapıyı kapatmasın', async () => {
+    await makeAdmin();
+    // Yedi ligin hepsi açık; her biri kalabalık bir hafta döndürüyor.
+    delete process.env.THESPORTSDB_LEAGUES;
+
+    const manyIds = Array.from({ length: 30 }, (_, i) => ({ idEvent: `9${i}` }));
+    const byId = Object.fromEntries(
+      manyIds.map((e, i) => [
+        e.idEvent,
+        {
+          idEvent: e.idEvent,
+          strHomeTeam: `E${i}`,
+          strAwayTeam: `D${i}`,
+          strTimestamp: future(50),
+        },
+      ]),
+    );
+
+    const { calls } = stubApi({
+      next: [
+        {
+          idEvent: 'anchor',
+          strHomeTeam: 'A',
+          strAwayTeam: 'B',
+          strTimestamp: future(20),
+          intRound: '1',
+          strSeason: '2026-2027',
+        },
+      ],
+      rounds: { '1': manyIds, '2': manyIds },
+      byId,
+    });
+
+    await fixturesService.importUpcoming();
+    expect(calls.length).toBeLessThanOrEqual(26);
   });
 });
