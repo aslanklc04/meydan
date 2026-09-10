@@ -160,3 +160,27 @@ describe('atıf sayaçları', () => {
     expect(service).not.toMatch(/viewerId.*insert|referrerId|invitedBy/);
   });
 });
+
+describe('takım armaları TAHMİN YAPILAN ekranda', () => {
+  const card = read('src/features/events/components/EventCard.tsx');
+
+  it('tahmin kartı arma çizebiliyor', () => {
+    /*
+     * Armalar önce ana sayfaya ve herkese açık etkinlik sayfasına eklenmişti;
+     * AKIŞA eklenmemişti. Oysa kullanıcı tahminini akışta yapıyor. "Site
+     * soğuk, logo yok" gözlemi tam olarak bu ekran içindi.
+     */
+    expect(card).toContain('outcome.imageUrl');
+  });
+
+  it('arma YOKSA hiçbir şey çizilmez', () => {
+    // Kırık görsel simgesi, hiç görsel olmamasından kötüdür.
+    expect(card).toMatch(/\{outcome\.imageUrl &&/);
+  });
+
+  it('akış ve etkinlik sayfası arma alanını KARTA GEÇİRİR', () => {
+    // Kart çizebiliyor olsa da veri gelmezse ekranda yine arma olmaz.
+    expect(read('src/app/(app)/app/feed/page.tsx')).toContain('imageUrl: o.imageUrl');
+    expect(read('src/app/(marketing)/event/[slug]/page.tsx')).toContain('imageUrl: o.imageUrl');
+  });
+});
