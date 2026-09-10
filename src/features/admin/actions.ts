@@ -9,6 +9,7 @@ import { adminService } from '@/server/modules/governance/admin.service';
 import { jobsService } from '@/server/modules/governance/jobs.service';
 import { rankingService } from '@/server/modules/ranking/service';
 import { auditService } from '@/server/modules/governance/audit.service';
+import { gazetteService } from '@/server/modules/gazette/service';
 import { log, logEvents } from '@/server/observability/logger';
 import type { FlowResult } from '@/features/events/actions';
 
@@ -264,6 +265,40 @@ export async function reviewReportAction(
     };
   } catch (error) {
     return adminError(error, 'bildirim inceleme');
+  }
+}
+
+/**
+ * Şikâyet edilen bir gazete kapağını gizler.
+ *
+ * KAPAK HEM RAFTAN HEM BAĞLANTIDAN DÜŞER. Yalnızca raftan düşürseydik
+ * gizleme bir gösteriden ibaret olurdu: içerik, asıl yayıldığı yerde —
+ * paylaşıldığı sohbette — okunmaya devam ederdi.
+ *
+ * Manşetler ve tahminler SİLİNMEZ. Gizleme bir sunum kararıdır; kullanıcının
+ * tahmin geçmişini yok etmek bambaşka ve çok daha ağır bir yaptırımdır.
+ */
+export async function hideGazetteAction(publicToken: string): Promise<FlowResult> {
+  if (!publicToken) return { ok: false, message: 'Kapak seçilmedi.' };
+  try {
+    const actor = await requireRole('ADMIN');
+    await gazetteService.hideByModerator(publicToken, actor.id);
+    await auditService.record({
+      actorId: actor.id,
+      action: 'GAZETTE_HIDDEN',
+      targetType: 'gazette',
+      targetId: publicToken,
+    });
+    /*
+     * `revalidatePath` ÇAĞRILMAZ — bu dosyanın en üstündeki kurala uyulur:
+     * Server Action içindeki yeniden doğrulama geçerli rotayı da tazeleyip
+     * onay mesajını yönetici görmeden siliyordu. Buna gerek de yok: hem ana
+     * sayfa hem kapak sayfası `force-dynamic`, yani bir sonraki istekte
+     * zaten taze veriyle çizilirler.
+     */
+    return { ok: true, message: 'Kapak gizlendi; bağlantısı da artık açılmıyor.' };
+  } catch (error) {
+    return adminError(error, 'kapak gizleme');
   }
 }
 
