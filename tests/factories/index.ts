@@ -1,8 +1,9 @@
 import { db } from '../../src/server/db';
-import { categories, eventOutcomes, events } from '../../src/server/db/schema';
+import { categories, challenges, eventOutcomes, events } from '../../src/server/db/schema';
 import { identityService } from '../../src/server/modules/identity/service';
 import { catalogService } from '../../src/server/modules/catalog/service';
 import { eq } from 'drizzle-orm';
+import { challengeService } from '../../src/server/modules/challenge/service';
 
 /** Test veri üreticileri. Gerçek servisleri kullanır — kısayol yoktur. */
 
@@ -100,4 +101,47 @@ export async function forceCloseDeadline(eventId: string): Promise<void> {
     .update(events)
     .set({ closesAt: past, resolvesAt: new Date(past.getTime() + 3600_000) })
     .where(eq(events.id, eventId));
+}
+
+/**
+ * Meydan Okumayı kabul et — karşı tarafı otomatik seçerek.
+ *
+ * Göç 0018'den beri kabul eden kendi tarafını seçmek ZORUNDA (eskiden karşı
+ * taraf oluşturmada atanıyordu ve üç sonuçlu maçlarda kabul edene çoğunlukla
+ * beraberliği veriyordu).
+ *
+ * Testlerin çoğunda hangi tarafın seçildiği önemli değil; önemli olan
+ * oluşturanınkinden FARKLI olması. Bu yardımcı, her çağrıda aynı sorguyu
+ * tekrar yazmamak için o "doğal karşı tarafı" bulur. Belirli bir taraf
+ * sınanacaksa `outcomeId` açıkça verilir.
+ */
+export async function acceptChallenge(
+  challengeId: string,
+  userId: string,
+  outcomeId?: string,
+): Promise<{ balance: number }> {
+  if (outcomeId) return challengeService.accept(challengeId, userId, outcomeId);
+
+  const rows = await db
+    .select({
+      eventId: challenges.eventId,
+      creatorOutcomeId: challenges.creatorOutcomeId,
+    })
+    .from(challenges)
+    .where(eq(challenges.id, challengeId))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) throw new Error(`Meydan Okuma bulunamadı: ${challengeId}`);
+
+  const outcomes = await db
+    .select({ id: eventOutcomes.id })
+    .from(eventOutcomes)
+    .where(eq(eventOutcomes.eventId, row.eventId))
+    .orderBy(eventOutcomes.sortOrder);
+
+  const counter = outcomes.find((o) => o.id !== row.creatorOutcomeId);
+  if (!counter) throw new Error('Karşı taraf seçeneği yok.');
+
+  return challengeService.accept(challengeId, userId, counter.id);
 }
