@@ -127,6 +127,13 @@
       "when": 1789243405967,
       "tag": "0017_prediction_share",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789329805967,
+      "tag": "0018_opponent_picks_side",
+      "breakpoints": true
     }
   ]
 }
