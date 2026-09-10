@@ -52,7 +52,18 @@ export default async function MyGazettesPage() {
               <Link href={`/g/${g.publicToken}`} className="text-ink text-base font-bold">
                 {g.title}
               </Link>
-              <p className="text-muted mt-1 text-xs">{g.publishedDay}</p>
+              <p className="text-muted mt-1 text-xs">
+                {g.publishedDay}
+                <span aria-hidden="true"> · </span>
+                {/* Kullanıcı kapağının nerede durduğunu bilmeli: "paylaştım
+                    ama kimse görmüyor" ile "ana sayfada duruyor" arasındaki
+                    fark, onun kararıydı ve hatırlatılmalı. */}
+                {g.hiddenAt !== null
+                  ? 'Yönetim tarafından gizlendi'
+                  : g.visibility === 'PUBLIC'
+                    ? 'Ana sayfa rafında'
+                    : 'Sadece bağlantıyla'}
+              </p>
               <p className="text-muted mt-2 text-sm">
                 <span aria-hidden="true">👁️ </span>
                 {formatCount(g.viewCount)} kez görüntülendi
