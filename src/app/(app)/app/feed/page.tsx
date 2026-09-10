@@ -55,7 +55,18 @@ export default async function FeedPage({
       coinService.getBalance(actor.id),
       socialService.feed(actor.id, akis ? { limit: 10, cursor: akis } : { limit: 10 }),
       gazetteService.eligible(actor.id),
-      predictionService.recentResults(actor.id),
+      /*
+       * PENCERE 3 GÜN DEĞİL 7 GÜN.
+       *
+       * Üç gün, hafta içi girmeyen bir kullanıcı için yetmiyordu: cumartesi
+       * oynanan maçın sonucunu salı günü giren kişi HİÇ görmüyordu. Ürünün
+       * verdiği tek söz "sonucu göreceksin" iken, o sözü tutmayan pencereyi
+       * savunmanın bir yolu yok.
+       *
+       * Satır sayısı yine 5'te kalıyor: pencere uzadı diye ekranın tepesi
+       * geçmişle dolmasın — asıl eylem hâlâ yeni tahmin.
+       */
+      predictionService.recentResults(actor.id, 24 * 7),
     ]);
 
   const isNewUser = rating.completed === 0;
@@ -121,7 +132,7 @@ export default async function FeedPage({
           <h2 id="sonuc-baslik" className="text-ink mb-1 text-lg font-bold">
             <span aria-hidden="true">🏁 </span>Sonuçlandı
           </h2>
-          <p className="text-muted mb-3 text-sm">Son üç günde kapanan tahminlerin.</p>
+          <p className="text-muted mb-3 text-sm">Son yedi günde kapanan tahminlerin.</p>
           <div className="space-y-3">
             {results.map((r) => (
               <ResultCard
@@ -140,7 +151,16 @@ export default async function FeedPage({
           </div>
           {/* Sonucu gören kişiyi YENİ TAHMİNE bağlayan cümle. Ölçtüğümüz
               davranış tam olarak bu geçiş. */}
-          <p className="text-muted mt-3 text-sm">Sıradaki tahminin aşağıda seni bekliyor.</p>
+          <p className="text-muted mt-3 text-sm">
+            Sıradaki tahminin aşağıda seni bekliyor.
+            <span aria-hidden="true"> · </span>
+            <Link
+              href="/sonuclar"
+              className="text-brand font-semibold underline underline-offset-4"
+            >
+              Biten tüm meydanlar
+            </Link>
+          </p>
         </section>
       )}
 
