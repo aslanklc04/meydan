@@ -55,7 +55,7 @@ export default async function ChallengeDetailPage({ params }: { params: Promise<
         <Side
           role="Karşı taraf"
           username={c.opponentUsername}
-          choice={c.opponentOutcomeLabel}
+          choice={c.opponentOutcomeLabel ?? 'Henüz seçilmedi'}
           isViewer={c.viewerIsOpponent}
           isWinner={
             completed && !refunded && c.winnerUserId !== null && c.winnerUserId === c.opponentId
@@ -116,7 +116,7 @@ export default async function ChallengeDetailPage({ params }: { params: Promise<
           challengeId={c.id}
           creatorUsername={c.creatorUsername}
           creatorOutcomeLabel={c.creatorOutcomeLabel}
-          yourOutcomeLabel={c.opponentOutcomeLabel}
+          options={c.options}
           stakeAmount={c.stakeAmount}
           isOpen={c.mode === 'OPEN'}
         />
