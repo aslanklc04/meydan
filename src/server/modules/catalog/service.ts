@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { db, withTransaction, type Tx } from '@/server/db';
 import { categories, eventOutcomes, events, predictions } from '@/server/db/schema';
 import { BusinessRuleError, NotFoundError } from '@/server/errors';
@@ -431,5 +432,96 @@ export const catalogService = {
       .where(eq(events.status, 'RESOLVED'))
       .orderBy(desc(events.resolvedAt))
       .limit(limit);
+  },
+
+  /**
+   * SONUÇ TAHTASI — herkese açık, son N gün.
+   *
+   * ── NEDEN VAR ──────────────────────────────────────────────────────────
+   * Sonuçlar zaten hesaplanıyordu: maç bitiyor, bakım işi skoru okuyor,
+   * etkinlik sonuçlanıyor. Ama sonucun GÖRÜLECEĞİ tek yer, o etkinliğin
+   * kendi sayfası ve tahmin yapmış kişinin kendi akışıydı. Yani ürün
+   * sözünü tutuyor, tuttuğunu gösteremiyordu.
+   *
+   * Kullanıcının canlıda söylediği tam olarak buydu: "akışa giren maçların
+   * sonuçları maçlar bitince neden gözükmüyor". Gözükmüyordu çünkü kimse
+   * için bir sonuç listesi yoktu.
+   *
+   * ── NEDEN HERKESE AÇIK ─────────────────────────────────────────────────
+   * Sonuç, ürünün tek dış kanıtıdır. "Burada tahmin edilir" cümlesine
+   * inanmayan bir ziyaretçiye gösterilecek şey, dün ne olduğunu bilen bir
+   * listedir. Bunun için hesap istemek, kanıtı duvarın arkasına koymaktır.
+   * Listede kimsenin adı geçmez; kaç kişinin bildiği geçer.
+   *
+   * ── NEDEN PENCERE VAR ──────────────────────────────────────────────────
+   * Sonsuz bir arşiv ürünün canlı olduğunu değil, eskidiğini gösterir.
+   * Yedi gün, "bu hafta ne oldu"yu kapsar ve dünkü maçı hâlâ içerir.
+   *
+   * İPTALLER DE LİSTEDE: maç ertelenince etkinlik iptal edilir ve çipler
+   * iade edilir. Bunu listeden düşürmek, kullanıcının aradığı maçın
+   * sessizce yok olması demektir — en çok merak edilen satır o olabilir.
+   */
+  async resultsBoard(days = 7, limit = 24, ctx: Ctx = db) {
+    const since = new Date(Date.now() - days * 24 * 3600_000);
+    const winner = alias(eventOutcomes, 'winner_outcome');
+
+    /*
+     * KAPANIŞ ANI: iptal edilen etkinlikte `resolved_at` BOŞTUR.
+     *
+     * Sonuçlanmayan bir etkinliğe "sonuç zamanı" yazmak yanlış olurdu, o
+     * yüzden çözüm alanı doldurmak değil; burada son güncelleme anını
+     * kullanmak. Yalnızca `resolved_at` ile filtrelenseydi iptaller listeden
+     * TAMAMEN düşerdi — oysa kullanıcının aradığı satır çoğu zaman tam
+     * olarak o olur: "maçım ne oldu?"
+     */
+    const settledAt = sql<Date>`coalesce(${events.resolvedAt}, ${events.updatedAt})`;
+
+    const rows = await ctx
+      .select({
+        id: events.id,
+        slug: events.slug,
+        title: events.title,
+        question: events.question,
+        status: events.status,
+        resolvedAt: settledAt,
+        predictionCount: events.predictionCount,
+        categoryName: categories.name,
+        categoryIcon: categories.icon,
+        winnerLabel: winner.label,
+        winnerImageUrl: winner.imageUrl,
+        /*
+         * Kazanan seçeneğin tahmin sayısı = O SONUCU BİLENLERİN SAYISI.
+         * Sayaç kapanışta dondurulduğu için sonradan oynamaz; ayrı bir
+         * "doğru bilenler" sorgusu açmaya gerek yok.
+         */
+        winnerCount: winner.predictionCount,
+      })
+      .from(events)
+      .innerJoin(categories, eq(categories.id, events.categoryId))
+      .leftJoin(winner, eq(winner.id, events.resolvedOutcomeId))
+      .where(
+        and(
+          inArray(events.status, ['RESOLVED', 'VOID']),
+          /*
+           * Tarih METİN olarak bağlanır: postgres.js ham şablonda `Date`
+           * nesnesini bağlayamaz (canlıda bir kez yakalandı). Açık tür
+           * dönüşümü, karşılaştırmanın metin üzerinden yapılmasını önler.
+           */
+          sql`coalesce(${events.resolvedAt}, ${events.updatedAt}) >= ${since.toISOString()}::timestamptz`,
+        ),
+      )
+      .orderBy(sql`coalesce(${events.resolvedAt}, ${events.updatedAt}) DESC`)
+      .limit(limit);
+
+    return rows.map((r) => ({
+      ...r,
+      voided: r.status === 'VOID',
+      /*
+       * İptalde "kimse bilemedi" DEĞİL, "sayılmadı" doğrudur. Bu yüzden
+       * sayı sıfıra düşürülmez, null yapılır: sıfır bir ölçümdür, null
+       * ölçüm olmadığını söyler.
+       */
+      correctCount: r.status === 'VOID' ? null : (r.winnerCount ?? 0),
+    }));
   },
 };
