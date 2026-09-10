@@ -6,6 +6,8 @@ import { consensusService } from '@/server/modules/catalog/consensus.service';
 import { catalogService } from '@/server/modules/catalog/service';
 import { formatCount } from '@/lib/utils';
 import { DailyMeydan } from '@/features/daily/components/DailyMeydan';
+import { gazetteService } from '@/server/modules/gazette/service';
+import { Shelf } from '@/features/gazette/components/Shelf';
 import { timeRemaining } from '@/features/predictions/labels';
 
 /**
@@ -65,6 +67,28 @@ export default async function Home() {
   const openEvents = (await catalogService.listOpenEvents(null, 7))
     .filter((e) => e.id !== featured?.id)
     .slice(0, 6);
+
+  /*
+   * ── GAZETE RAFLARI ──────────────────────────────────────────────────────
+   *
+   * Buraya kadar ana sayfadaki her şeyi ÜRÜN üretiyordu. Raflar, ürünün
+   * kullanıcılardan içerik aldığı ilk yer: bir kişinin kurduğu kapak
+   * herkesin gördüğü içerik oluyor.
+   *
+   * SIRALAMA ÖLÇÜTÜ BEĞENİ DEĞİL. Beğeni sonuçtan ÖNCE toplanır; beğeniye
+   * göre sıralanan bir raf "kim iyi tahmin ediyor"u değil "kimin çok
+   * arkadaşı var"ı gösterir ve kullanıcıyı dürüst tahmin yerine iddialı
+   * tahmin yazmaya iter. Ölçüt zaman ve sonuçtur.
+   *
+   * Sıra bilinçli: bugün kurulanlar (yenilik) → bugün sonuçlanacaklar
+   * (merak) → tutanlar (kanıt). Sonuncusu en sondadır çünkü ancak sonuçlar
+   * biriktiğinde dolacak.
+   */
+  const [shelfToday, shelfResolving, shelfHits] = await Promise.all([
+    gazetteService.shelfToday(),
+    gazetteService.shelfResolvingToday(),
+    gazetteService.shelfHits(6),
+  ]);
   return (
     <main id="icerik" className="mx-auto w-full max-w-2xl flex-1 px-6 py-16">
       <h1 className="text-ink text-5xl font-bold tracking-tight">{brand.appName}</h1>
@@ -149,6 +173,26 @@ export default async function Home() {
           </ul>
         </section>
       )}
+
+      {/* ── Gazete rafları ──────────────────────────────────────────────── */}
+      <Shelf
+        title="⏳ Sonucu bugün belli olacak"
+        hint="Bugün sınanacak iddialar"
+        entries={shelfResolving}
+        show="countdown"
+      />
+      <Shelf
+        title="📰 Bugün kurulan kapaklar"
+        hint="Yeniden eskiye"
+        entries={shelfToday}
+        show="time"
+      />
+      <Shelf
+        title="✅ Tuttu"
+        hint="Sonuçlandıktan sonra, isabete göre — beğeniye göre değil"
+        entries={shelfHits}
+        show="record"
+      />
 
       {/* ── Ön kapı ─────────────────────────────────────────────────────── */}
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
