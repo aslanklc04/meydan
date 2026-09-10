@@ -24,6 +24,14 @@ export default function robots(): MetadataRoute.Robots {
           '/register',
           '/reset-password',
           '/verify-email',
+          /*
+           * Gelecek Gazetesi bağlantıları TAHMİN EDİLEMEZ ama "gizli" değildir.
+           * Dizine girerlerse kullanıcının paylaştığı kişilerin ötesine yayılır
+           * ve kiminle paylaşılacağı kararı kullanıcının elinden çıkar. Sayfa
+           * ayrıca kendi başlığında da indekslenmemeyi söyler; ikisi birden
+           * durur çünkü robots.txt bir rica, sayfa etiketi ise ikinci kapıdır.
+           */
+          '/g/',
         ],
       },
     ],
