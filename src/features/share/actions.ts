@@ -26,7 +26,12 @@ export async function createShareLinkAction(eventId: string): Promise<ShareResul
     const actor = await currentActor();
     if (!actor) throw new AuthenticationError();
 
-    const mine = await predictionService.findActiveForUserEvent(actor.id, eventId);
+    /*
+     * Durumdan BAĞIMSIZ arama: asıl paylaşılası an sonucun geldiği andır ve
+     * o tahmin artık "açık" değildir. Yalnızca açık tahminlere baksaydık
+     * "Ben demiştim" paylaşımı hiç mümkün olmazdı.
+     */
+    const mine = await predictionService.findAnyForUserEvent(actor.id, eventId);
     if (!mine) {
       return {
         ok: false,
