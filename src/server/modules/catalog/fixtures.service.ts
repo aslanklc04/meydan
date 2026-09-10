@@ -128,7 +128,30 @@ type ApiEvent = {
   readonly strStatus?: string | null;
   readonly intHomeScore?: string | null;
   readonly intAwayScore?: string | null;
+  readonly strHomeTeamBadge?: string | null;
+  readonly strAwayTeamBadge?: string | null;
 };
+
+/**
+ * Arma adresi — yalnızca sağlayıcının kendi görsel sunucusundan kabul edilir.
+ *
+ * Dış adres doğrudan `<img src>` içine konacağı için süzülür: kaynağı
+ * denetlenmeyen bir adres, veri kaynağı bir gün ele geçirilirse ya da hatalı
+ * veri gönderirse sayfaya istenmeyen içerik taşıyabilir. Beyaz liste, bu
+ * riski en başta keser.
+ */
+function badgeUrl(raw: string | null | undefined): string | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:') return null;
+    if (!parsed.hostname.endsWith('thesportsdb.com')) return null;
+    return value.slice(0, 300);
+  } catch {
+    return null;
+  }
+}
 
 function apiKey(): string {
   return process.env.THESPORTSDB_KEY?.trim() || FREE_KEY;
@@ -292,9 +315,9 @@ export const fixturesService = {
           closesAt: kickoff,
           resolvesAt: new Date(kickoff.getTime() + 2.5 * 3600_000),
           outcomes: [
-            { key: 'HOME', label: home },
+            { key: 'HOME', label: home, imageUrl: badgeUrl(event.strHomeTeamBadge) },
             { key: 'DRAW', label: 'Beraberlik' },
-            { key: 'AWAY', label: away },
+            { key: 'AWAY', label: away, imageUrl: badgeUrl(event.strAwayTeamBadge) },
           ],
           createdById: owner,
           status: 'OPEN',
