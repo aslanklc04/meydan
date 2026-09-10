@@ -243,7 +243,11 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
                 closesAt: event.closesAt.toISOString(),
                 predictionCount: event.predictionCount,
                 challengeCount: event.challengeCount,
-                outcomes: event.outcomes.map((o) => ({ id: o.id, label: o.label })),
+                outcomes: event.outcomes.map((o) => ({
+                  id: o.id,
+                  label: o.label,
+                  imageUrl: o.imageUrl,
+                })),
                 myOutcomeId: event.myOutcomeId,
                 myOutcomeLabel,
               }}
