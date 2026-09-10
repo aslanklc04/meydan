@@ -24,19 +24,30 @@ function toResult(error: unknown): FlowResult {
  */
 
 /**
- * Meydan Okumayı kabul et.
+ * Meydan Okumayı kabul et — KENDİ TARAFINI SEÇEREK.
  *
- * Karşı sonuç ADR-18 uyarınca zaten atanmıştır ve kabul kartında gösterilir —
- * kullanıcıdan tekrar seçim İSTENMEZ (ürün kuralı 9B ve 25).
+ * Karşı sonuç eskiden oluşturma anında atanıyordu (ADR-18) ve kabul eden
+ * seçim yapmıyordu. Üç sonuçlu maçlarda bu, kabul edene çoğunlukla
+ * beraberliği veriyordu: oluşturan en olası sonucu seçiyor, kabul eden
+ * azınlıkta kalanı alıyordu. Artık taraf kabul edene ait.
+ *
+ * İki sonuçlu etkinlikte seçenek tektir; arayüz onu hazır işaretler, yani
+ * "fazladan adım koymama" kuralı tasarlandığı yerde korunur.
  */
-export async function acceptChallengeAction(challengeId: string): Promise<FlowResult> {
+export async function acceptChallengeAction(
+  challengeId: string,
+  outcomeId: string,
+): Promise<FlowResult> {
   if (!idSchema.safeParse(challengeId).success) {
     return { ok: false, message: 'Bu Meydan Okuma bulunamadı.' };
+  }
+  if (!idSchema.safeParse(outcomeId).success) {
+    return { ok: false, message: 'Önce hangi tarafta olduğunu seç.' };
   }
 
   try {
     const actor = await requireActor();
-    const { balance } = await challengeService.accept(challengeId, actor.id);
+    const { balance } = await challengeService.accept(challengeId, actor.id, outcomeId);
     return {
       ok: true,
       message: `Meydan Okumayı kabul ettin. Kalan bakiyen ${balance} Gümüş Çip.`,
