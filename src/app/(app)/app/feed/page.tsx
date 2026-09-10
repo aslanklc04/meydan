@@ -205,7 +205,11 @@ export default async function FeedPage({
                   closesAt: event.closesAt.toISOString(),
                   predictionCount: event.predictionCount,
                   challengeCount: event.challengeCount,
-                  outcomes: event.outcomes.map((o) => ({ id: o.id, label: o.label })),
+                  outcomes: event.outcomes.map((o) => ({
+                    id: o.id,
+                    label: o.label,
+                    imageUrl: o.imageUrl,
+                  })),
                   myOutcomeId: event.myOutcomeId,
                   myOutcomeLabel:
                     event.outcomes.find((o) => o.id === event.myOutcomeId)?.label ?? null,
