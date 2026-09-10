@@ -162,6 +162,13 @@ export async function loginAction(_prev: ActionState, formData: FormData): Promi
     await signIn('credentials', {
       email: parsed.data.email,
       password: parsed.data.password,
+      /*
+       * BENİ HATIRLA — işaretlenmemiş bir onay kutusu forma HİÇ gelmez, bu
+       * yüzden yokluk "hatırlama" demektir. Varsayılan kısa oturum: ortak
+       * kullanılan bir bilgisayarda bir sonraki kişi hazır açılmış bir hesap
+       * bulmamalı.
+       */
+      remember: formData.get('remember') === 'on' ? 'true' : 'false',
       redirectTo: safeNext(formData.get('next') as string | null),
     });
     return { status: 'success', message: 'Giriş yapıldı.' };
