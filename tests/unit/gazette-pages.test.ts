@@ -137,3 +137,62 @@ describe('paylaş çubuğu', () => {
     expect(bar).not.toMatch(/utm_|fbclid|gclid/);
   });
 });
+
+describe('görünürlük ve moderasyon arayüzü', () => {
+  const composer = read('src/features/gazette/components/GazetteComposer.tsx');
+  const controls = read('src/features/gazette/components/GazetteControls.tsx');
+  const shelf = read('src/features/gazette/components/Shelf.tsx');
+
+  it('görünürlük kutusu ÖNCEDEN İŞARETLİ DEĞİL', () => {
+    // Önceden işaretlenmiş bir kutu, sorulmuş sayılmaz.
+    expect(composer).toContain('name="isPublic"');
+    expect(composer).not.toMatch(/name="isPublic"[^>]*defaultChecked/);
+    expect(composer).not.toMatch(/name="isPublic"[^>]*checked/);
+  });
+
+  it('rafa koymanın geri dönüşü olmadığı ÖNCEDEN yazılı', () => {
+    expect(composer).toContain('geri koyamazsın');
+  });
+
+  it('raftan çekmeden ÖNCE geri dönüşsüzlük tekrar söyleniyor', () => {
+    expect(controls).toContain('bir daha geri konamaz');
+    // Ve "silinmiyor" olduğu da: kullanıcı ne kaybettiğini bilmeli.
+    expect(controls).toContain('Manşetler silinmez');
+  });
+
+  it('şikâyet yolu var ve otomatik yaptırım vaat etmiyor', () => {
+    expect(controls).toContain("targetType: 'GAZETTE'");
+    expect(controls).toContain('bir kişi tarafından incelenir');
+    expect(controls).not.toContain('kaldırıldı');
+  });
+
+  it('raf küçük sayıda "en çok / en iyi" DEMEZ', () => {
+    // Üç kapaklı bir listeye "en çok tutanlar" demek, arkasında bir yarış
+    // varmış izlenimi verir.
+    const homepage = read('src/app/page.tsx');
+    const shelfTitles = homepage.match(/title="[^"]*"/g) ?? [];
+    for (const t of shelfTitles) {
+      expect(t.toLowerCase()).not.toMatch(/en çok|en iyi|en popüler/);
+    }
+    expect(shelf).toContain('kapak'); // kaç kapak olduğu dürüstçe yazılır
+  });
+
+  it('"Tuttu" rafı karnenin tamamını gösterir', () => {
+    expect(shelf).toContain('sonuçtan');
+    expect(shelf).toContain('tuttu');
+  });
+
+  it('boş raf hiç çizilmez', () => {
+    expect(shelf).toMatch(/entries\.length === 0\) return null/);
+  });
+});
+
+describe('süzgeç herkese açık metinde ZORUNLU', () => {
+  it('gazete servisi başlığı süzgeçten geçirir', () => {
+    const service = read('src/server/modules/gazette/service.ts');
+    expect(service).toContain('checkPublicText');
+    // Süzgeç görünürlükten BAĞIMSIZ çalışır: gizli kapağın da bağlantısı
+    // paylaşılır.
+    expect(service).not.toMatch(/isPublic[\s\S]{0,80}checkPublicText/);
+  });
+});
