@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { adminService } from '@/server/modules/governance/admin.service';
 import { DataTable } from '@/features/admin/components/DataTable';
 import { ActionButton } from '@/features/admin/components/ActionButton';
-import { reviewReportAction } from '@/features/admin/actions';
+import { hideGazetteAction, reviewReportAction } from '@/features/admin/actions';
 
 export const metadata: Metadata = { title: 'Bildirimler', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
@@ -28,11 +28,36 @@ export default async function AdminReportsPage() {
         empty="Açık bildirim yok."
         rows={rows.map((r) => [
           `@${r.reporterUsername}`,
-          r.targetType,
+          r.targetType === 'GAZETTE' ? (
+            <a
+              key="t"
+              href={`/g/${r.targetId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-brand underline"
+            >
+              Gazete kapağı
+            </a>
+          ) : (
+            r.targetType
+          ),
           reasonLabel[r.reason] ?? r.reason,
           r.note ?? '—',
           r.createdAt.toLocaleString('tr-TR'),
-          <span key="a" className="flex gap-2">
+          <span key="a" className="flex flex-wrap gap-2">
+            {/*
+              Gazete kapağı için AYRI bir eylem: "işleme aldım" demek
+              bildirimi kapatır ama içeriği yerinde bırakır. Şikâyet edilen
+              kapağın gerçekten kaldırılması için gizleme düğmesi gerekir,
+              yoksa moderasyon kuyruğu temizlenir ve içerik durur.
+            */}
+            {r.targetType === 'GAZETTE' && (
+              <ActionButton
+                label="Kapağı gizle"
+                tone="danger"
+                action={hideGazetteAction.bind(null, r.targetId)}
+              />
+            )}
             <ActionButton
               label="İşleme al"
               action={reviewReportAction.bind(null, r.id, 'REVIEWED')}
