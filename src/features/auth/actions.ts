@@ -8,6 +8,7 @@ import { enforceSharedRateLimit } from '@/server/security/shared-rate-limit';
 import { currentIpHash } from '@/server/security/request-identity';
 import { log, logEvents } from '@/server/observability/logger';
 import { mailer } from '@/server/modules/identity/email';
+import { gazetteService } from '@/server/modules/gazette/service';
 import { safeNext } from './safe-next';
 import {
   loginSchema,
@@ -86,6 +87,31 @@ export async function registerAction(_prev: ActionState, formData: FormData): Pr
      * mesajı gösterilir.
      */
     const sent = await mailer.sendEmailVerification(parsed.data.email, result.verificationToken);
+
+    /*
+     * ATIF SAYACI (Faz 8) — bir Gelecek Gazetesi bağlantısından gelmişse.
+     *
+     * Yalnızca SAYAR: hangi kullanıcının hangi kapaktan geldiği YAZILMAZ.
+     * Bunu bilmek ürüne bir şey katmaz, ama kaydetmek "arkadaşın seni davet
+     * etti" türünden bir ilişki tablosu doğurur ve kimse buna izin vermedi.
+     *
+     * Hata YUTULUR: bir sayaç yüzünden kayıt başarısız olamaz. Kullanıcı
+     * hesabını aldı; sayacın tutmaması yalnızca bizim ölçümümüzü eksik
+     * bırakır.
+     */
+    const ref = formData.get('ref');
+    if (typeof ref === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(ref)) {
+      try {
+        await gazetteService.countSignup(ref);
+      } catch (error) {
+        log.warn(logEvents.unexpectedError, {
+          operation: 'gazette.countSignup',
+          outcome: 'failure',
+          error,
+        });
+      }
+    }
+
     return {
       status: 'success',
       message: sent
