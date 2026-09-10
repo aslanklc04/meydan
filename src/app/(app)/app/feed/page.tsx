@@ -9,6 +9,8 @@ import { coinService } from '@/server/modules/economy/service';
 import { socialService } from '@/server/modules/social/service';
 import { onboardingService } from '@/server/modules/identity/onboarding.service';
 import { gazetteService } from '@/server/modules/gazette/service';
+import { predictionService } from '@/server/modules/prediction/service';
+import { ResultCard } from '@/features/share/components/ResultCard';
 import { EventCard } from '@/features/events/components/EventCard';
 import { ChallengeCard } from '@/features/challenges/components/ChallengeCard';
 import { EmptyState } from '@/components/feedback/EmptyState';
@@ -44,15 +46,17 @@ export default async function FeedPage({
   const { akis } = await searchParams;
   const interests = await onboardingService.interestCategoryIds(actor.id);
 
-  const [events, incoming, open, rating, balance, social, gazetteEligible] = await Promise.all([
-    catalogService.listOpenEvents(actor.id, 20, undefined, interests),
-    challengeService.listIncoming(actor.id),
-    challengeService.listOpen(actor.id),
-    reputationService.getSummary(actor.id),
-    coinService.getBalance(actor.id),
-    socialService.feed(actor.id, akis ? { limit: 10, cursor: akis } : { limit: 10 }),
-    gazetteService.eligible(actor.id),
-  ]);
+  const [events, incoming, open, rating, balance, social, gazetteEligible, results] =
+    await Promise.all([
+      catalogService.listOpenEvents(actor.id, 20, undefined, interests),
+      challengeService.listIncoming(actor.id),
+      challengeService.listOpen(actor.id),
+      reputationService.getSummary(actor.id),
+      coinService.getBalance(actor.id),
+      socialService.feed(actor.id, akis ? { limit: 10, cursor: akis } : { limit: 10 }),
+      gazetteService.eligible(actor.id),
+      predictionService.recentResults(actor.id),
+    ]);
 
   const isNewUser = rating.completed === 0;
   const gazetteReady = gazetteEligible.length;
@@ -101,6 +105,42 @@ export default async function FeedPage({
           >
             Kapağımı kur
           </Link>
+        </section>
+      )}
+
+      {/* ── SONUÇLANDI — dönüş döngüsünün kapandığı yer ───────────────────
+          Kullanıcı tahminini yapıyor, maç oynanıyor, sonuç geliyordu ve
+          akışta hiçbir şey değişmiyordu. Ürünün verdiği tek söz "sonucu
+          göreceksin"di; sonucun görüneceği bir yer yoktu.
+
+          EN ÜSTTE, çünkü kullanıcı akışa girdiğinde ilk merak ettiği şey
+          bu. Bekleyen bir çağrı varsa o daha acildir; sonuçlar hemen
+          altında durur. */}
+      {results.length > 0 && (
+        <section aria-labelledby="sonuc-baslik">
+          <h2 id="sonuc-baslik" className="text-ink mb-1 text-lg font-bold">
+            <span aria-hidden="true">🏁 </span>Sonuçlandı
+          </h2>
+          <p className="text-muted mb-3 text-sm">Son üç günde kapanan tahminlerin.</p>
+          <div className="space-y-3">
+            {results.map((r) => (
+              <ResultCard
+                key={r.predictionId}
+                data={{
+                  eventId: r.eventId,
+                  eventSlug: r.eventSlug,
+                  eventTitle: r.eventTitle,
+                  question: r.eventQuestion,
+                  myOutcomeLabel: r.myOutcomeLabel,
+                  resultOutcomeLabel: r.resolvedOutcomeLabel,
+                  correct: r.correct,
+                }}
+              />
+            ))}
+          </div>
+          {/* Sonucu gören kişiyi YENİ TAHMİNE bağlayan cümle. Ölçtüğümüz
+              davranış tam olarak bu geçiş. */}
+          <p className="text-muted mt-3 text-sm">Sıradaki tahminin aşağıda seni bekliyor.</p>
         </section>
       )}
 
