@@ -9,6 +9,7 @@ import { currentIpHash } from '@/server/security/request-identity';
 import { log, logEvents } from '@/server/observability/logger';
 import { mailer } from '@/server/modules/identity/email';
 import { gazetteService } from '@/server/modules/gazette/service';
+import { shareService } from '@/server/modules/share/service';
 import { safeNext } from './safe-next';
 import {
   loginSchema,
@@ -102,7 +103,13 @@ export async function registerAction(_prev: ActionState, formData: FormData): Pr
     const ref = formData.get('ref');
     if (typeof ref === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(ref)) {
       try {
+        /*
+         * Jeton hangi paylaşım türüne aitse ORAYA yazılır. İkisi de sessizdir
+         * ve bilinmeyen jetonda hiçbir şey yapmaz; bu yüzden ikisini de
+         * çağırmak güvenli ve jetonun türünü ayrıca taşımaya gerek kalmıyor.
+         */
         await gazetteService.countSignup(ref);
+        await shareService.countSignup(ref);
       } catch (error) {
         log.warn(logEvents.unexpectedError, {
           operation: 'gazette.countSignup',
