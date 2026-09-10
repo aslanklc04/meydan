@@ -196,3 +196,35 @@ describe('süzgeç herkese açık metinde ZORUNLU', () => {
     expect(service).not.toMatch(/isPublic[\s\S]{0,80}checkPublicText/);
   });
 });
+
+describe('bakım işi HERKESİN ziyaretiyle tetiklenir', () => {
+  it('mantık TEK dosyada durur', () => {
+    // İki kabuğa kopyalansaydı eşik ya da hata yönetimi birinde değişir,
+    // diğerinde kalırdı.
+    const trigger = read('src/server/modules/governance/visit-trigger.ts');
+    expect(trigger).toContain('STALE_AFTER_MINUTES');
+    expect(trigger).toContain('runScheduled');
+  });
+
+  it('OTURUM İÇİ kabuk tetikleyiciyi çağırır', () => {
+    expect(read('src/app/(app)/app/layout.tsx')).toContain('triggerMaintenanceAfterResponse()');
+  });
+
+  it('HERKESE AÇIK kabuk da çağırır — asıl düzeltme bu', () => {
+    // Canlıda görülen hata: tetikleyici yalnızca oturum içi kabuktaydı.
+    // Kurucu bir gün giriş yapmayınca maç çekilmedi, Günün Meydanı
+    // seçilmedi ve ana sayfa BOŞ kaldı — hem de siteyi ilk kez gören
+    // ziyaretçiler için.
+    expect(read('src/app/(marketing)/layout.tsx')).toContain('triggerMaintenanceAfterResponse()');
+  });
+
+  it('iş YANITTAN SONRA çalışır — ziyaretçi beklemez', () => {
+    expect(read('src/server/modules/governance/visit-trigger.ts')).toContain('after(');
+  });
+
+  it('hata YUTULUR — bakım arızası sayfayı düşürmez', () => {
+    expect(read('src/server/modules/governance/visit-trigger.ts')).toMatch(
+      /catch[\s\S]{0,120}log\.error/,
+    );
+  });
+});
