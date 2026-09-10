@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentActor } from '@/server/auth';
+import { logoutAction } from '@/features/auth/actions';
 import { triggerMaintenanceAfterResponse } from '@/server/modules/governance/visit-trigger';
 import { coinService } from '@/server/modules/economy/service';
 import { reputationService } from '@/server/modules/reputation/service';
@@ -89,6 +90,26 @@ export default async function AppLayout({ children }: { readonly children: React
                   </span>
                 )}
               </Link>
+
+              {/*
+                ÇIKIŞ — üst çubukta.
+                Çıkış zaten vardı ama profil sayfasının EN ALTINDA, soluk bir
+                düğme olarak duruyordu; kurucu bulamadı. Bulunamayan bir çıkış
+                yolu, olmayan çıkış yoludur — ve hesabından çıkamamak, ortak
+                kullanılan bir bilgisayarda güvenlik meselesidir.
+              */}
+              <form action={logoutAction}>
+                <button
+                  type="submit"
+                  aria-label="Oturumu kapat"
+                  title="Oturumu kapat"
+                  className="text-muted focus-visible:outline-ink flex min-h-11 min-w-11 items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2"
+                >
+                  <span aria-hidden="true" className="text-lg">
+                    ⏻
+                  </span>
+                </button>
+              </form>
             </div>
           </div>
         </header>
