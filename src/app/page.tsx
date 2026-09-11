@@ -9,6 +9,7 @@ import { DailyMeydan } from '@/features/daily/components/DailyMeydan';
 import { gazetteService } from '@/server/modules/gazette/service';
 import { Shelf } from '@/features/gazette/components/Shelf';
 import { ResultRow } from '@/features/results/components/ResultRow';
+import { TakimArmasi } from '@/components/media/TakimArmasi';
 import { bolum } from '@/server/observability/section';
 import { timeRemaining } from '@/features/predictions/labels';
 
@@ -194,15 +195,9 @@ export default async function Home() {
                       .filter((o) => o.imageUrl)
                       .slice(0, 2)
                       .map((o) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <TakimArmasi
                           key={o.id}
-                          src={o.imageUrl!}
-                          alt=""
-                          aria-hidden="true"
-                          width={28}
-                          height={28}
-                          loading="lazy"
+                          src={o.imageUrl}
                           className="bg-background h-7 w-7 rounded-full object-contain"
                         />
                       ))}
