@@ -75,6 +75,7 @@ export default async function ChallengesPage() {
         panels={[
           {
             key: 'GELEN',
+            count: incoming.length,
             content:
               incoming.length === 0 ? (
                 <EmptyState
@@ -87,6 +88,7 @@ export default async function ChallengesPage() {
           },
           {
             key: 'GÖNDERDİKLERİM',
+            count: sent.length,
             content:
               sent.length === 0 ? (
                 <EmptyState
@@ -99,6 +101,7 @@ export default async function ChallengesPage() {
           },
           {
             key: 'SÜRÜYOR',
+            count: active.length,
             content:
               active.length === 0 ? (
                 <EmptyState
@@ -131,6 +134,7 @@ export default async function ChallengesPage() {
           },
           {
             key: 'AÇIK MEYDANLAR',
+            count: open.length,
             content:
               open.length === 0 ? (
                 <EmptyState
@@ -143,6 +147,7 @@ export default async function ChallengesPage() {
           },
           {
             key: 'TAMAMLANANLAR',
+            count: done.length,
             content:
               done.length === 0 ? (
                 <EmptyState
