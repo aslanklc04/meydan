@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { TakimArmasi } from '@/components/media/TakimArmasi';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/feedback/Toast';
@@ -185,14 +186,8 @@ export function EventCard({
                     görsel olmamasından kötüdür.
                   */}
                   {outcome.imageUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <TakimArmasi
                       src={outcome.imageUrl}
-                      alt=""
-                      aria-hidden="true"
-                      width={28}
-                      height={28}
-                      loading="lazy"
                       className="mr-2 inline-block h-7 w-7 shrink-0 object-contain align-middle"
                     />
                   )}
@@ -352,7 +347,19 @@ export function EventCard({
       )}
 
       <p className="text-muted mt-3 text-xs">
-        {event.predictionCount} tahmin · {event.challengeCount} {brand.challengeNoun}
+        {/*
+          SIFIR SAYI YAZILMAZ. "3 tahmin · 0 Meydan Okuma" satırının ikinci
+          yarısı hiçbir şey öğretmez; yalnızca eksikliği duyurur. Ürün zaten
+          boşluğu doldurma görüntüsünden kaçınıyor — boşluğu ilan etmekten de
+          kaçınmalı.
+        */}
+        {event.predictionCount} tahmin
+        {event.challengeCount > 0 && (
+          <>
+            <span aria-hidden="true"> · </span>
+            {event.challengeCount} {brand.challengeNoun}
+          </>
+        )}
       </p>
     </article>
   );
