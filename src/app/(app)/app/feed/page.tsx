@@ -17,6 +17,7 @@ import { ChallengeCard } from '@/features/challenges/components/ChallengeCard';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { brand } from '@/config';
 import { formatCount } from '@/lib/utils';
+import { bolum } from '@/server/observability/section';
 
 export const metadata: Metadata = { title: brand.nav.feed, robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -49,13 +50,32 @@ export default async function FeedPage({
 
   const [events, incoming, open, rating, balance, social, gazetteEligible, results, allResults] =
     await Promise.all([
-      catalogService.listOpenEvents(actor.id, 20, undefined, interests),
-      challengeService.listIncoming(actor.id),
-      challengeService.listOpen(actor.id),
+      /*
+       * ── BİR BÖLÜM DÜŞERSE AKIŞ KAPANMAZ ─────────────────────────────────
+       *
+       * Bu ekran dokuz ayrı sorgudan besleniyor ve `Promise.all` bunlardan
+       * biri hata verdiğinde HEPSİNİ düşürüyor: kullanıcı akışını değil
+       * "Bir sorun oluştu" yazısını görüyor. Ana sayfada tam olarak bu oldu.
+       *
+       * Yedek değer her zaman BOŞ — uydurma satır değil. Kullanıcı eksik bir
+       * bölüm görür, biz günlükte sebebini görürüz. Puan ve bakiye sarmalanmaz:
+       * onlar olmadan ekran zaten anlamsızdır, o hâlde hata sınırına düşsün.
+       */
+      bolum(
+        'acik_etkinlikler',
+        () => catalogService.listOpenEvents(actor.id, 20, undefined, interests),
+        [],
+      ),
+      bolum('gelen_cagrilar', () => challengeService.listIncoming(actor.id), []),
+      bolum('acik_meydanlar', () => challengeService.listOpen(actor.id), []),
       reputationService.getSummary(actor.id),
       coinService.getBalance(actor.id),
-      socialService.feed(actor.id, akis ? { limit: 10, cursor: akis } : { limit: 10 }),
-      gazetteService.eligible(actor.id),
+      bolum(
+        'sosyal_akis',
+        () => socialService.feed(actor.id, akis ? { limit: 10, cursor: akis } : { limit: 10 }),
+        { items: [], nextCursor: null },
+      ),
+      bolum('gazete_uygun', () => gazetteService.eligible(actor.id), []),
       /*
        * PENCERE 3 GÜN DEĞİL 7 GÜN.
        *
@@ -67,7 +87,7 @@ export default async function FeedPage({
        * Satır sayısı yine 5'te kalıyor: pencere uzadı diye ekranın tepesi
        * geçmişle dolmasın — asıl eylem hâlâ yeni tahmin.
        */
-      predictionService.recentResults(actor.id, 24 * 7),
+      bolum('kendi_sonuclarim', () => predictionService.recentResults(actor.id, 24 * 7), []),
       /*
        * BİTEN MEYDANLAR — TAHMİN ETMEDİKLERİN DE DÂHİL.
        *
@@ -81,7 +101,7 @@ export default async function FeedPage({
        * (düzenlediğim sayfayı düzeltip kullanıcının kullandığı sayfayı
        * atlamak) dördüncü kez yaptım; bu satır o hatanın kaydıdır.
        */
-      catalogService.resultsBoard(7, 12),
+      bolum('biten_meydanlar', () => catalogService.resultsBoard(7, 12), []),
     ]);
 
   const isNewUser = rating.completed === 0;
