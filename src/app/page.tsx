@@ -9,6 +9,7 @@ import { DailyMeydan } from '@/features/daily/components/DailyMeydan';
 import { gazetteService } from '@/server/modules/gazette/service';
 import { Shelf } from '@/features/gazette/components/Shelf';
 import { ResultRow } from '@/features/results/components/ResultRow';
+import { bolum } from '@/server/observability/section';
 import { timeRemaining } from '@/features/predictions/labels';
 
 /**
@@ -36,6 +37,13 @@ export const metadata = {
  */
 export const dynamic = 'force-dynamic';
 
+/*
+ * ── ÖN KAPI HİÇBİR ZAMAN KAPANMAZ ───────────────────────────────────────────
+ *
+ * Aşağıdaki her bölüm `bolum()` ile ayrı ayrı korunuyor: biri düşse bile
+ * sayfa açılır, yalnızca o bölüm çizilmez. Canlıda tek bir bölümdeki tek bir
+ * tarih hatası bütün siteyi kapattığı için eklendi.
+ */
 export default async function Home() {
   /*
    * GÜNÜN MEYDANI — hero'nun hemen altında.
@@ -45,15 +53,19 @@ export default async function Home() {
    * içine girer. Değeri görmeden hesap istemek, en pahalı adımı en başa
    * koymaktır.
    */
-  const featured = await featuredService.today();
+  const featured = await bolum('gunun_meydani', () => featuredService.today(), null);
 
   /*
    * Giriş yapmamış ziyaretçi TAHMİN YAPMAMIŞ sayılır, bu yüzden dağılım
    * hiç istenmez — yalnızca toplam katılımcı sayısı okunur. Sunucu o veriyi
    * üretmediği için sayfa kaynağına da düşmez.
    */
-  const consensus = featured ? await consensusService.view(featured.id, null) : null;
-  const outcomes = featured ? await consensusService.outcomesOf(featured.id) : [];
+  const consensus = featured
+    ? await bolum('konsensus', () => consensusService.view(featured.id, null), null)
+    : null;
+  const outcomes = featured
+    ? await bolum('secenekler', () => consensusService.outcomesOf(featured.id), [])
+    : [];
 
   /*
    * BUGÜN AÇIK OLANLAR — ziyaretçi ürünün yaşadığını görsün.
@@ -65,7 +77,7 @@ export default async function Home() {
    *
    * Günün Meydanı listeden çıkarılır: hemen yukarıda zaten duruyor.
    */
-  const openEvents = (await catalogService.listOpenEvents(null, 7))
+  const openEvents = (await bolum('acik_olanlar', () => catalogService.listOpenEvents(null, 7), []))
     .filter((e) => e.id !== featured?.id)
     .slice(0, 6);
 
@@ -86,9 +98,9 @@ export default async function Home() {
    * biriktiğinde dolacak.
    */
   const [todayRaw, resolvingRaw, hitsRaw, results] = await Promise.all([
-    gazetteService.shelfToday(),
-    gazetteService.shelfResolvingToday(),
-    gazetteService.shelfHits(6),
+    bolum('raf_bugun', () => gazetteService.shelfToday(), []),
+    bolum('raf_sonuclanacak', () => gazetteService.shelfResolvingToday(), []),
+    bolum('raf_tuttu', () => gazetteService.shelfHits(6), []),
     /*
      * SON SONUÇLAR — ürünün tek dış kanıtı.
      *
@@ -100,7 +112,7 @@ export default async function Home() {
      * Burada yalnızca ilk birkaç satır durur; tamamı /sonuclar'da. Ana
      * sayfanın işi arşiv olmak değil, kanıtın var olduğunu göstermek.
      */
-    catalogService.resultsBoard(7, 4),
+    bolum('sonuclar', () => catalogService.resultsBoard(7, 4), []),
   ]);
 
   /*
