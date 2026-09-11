@@ -9,6 +9,7 @@ import { notificationService } from '@/server/modules/social/notification.servic
 import { brand } from '@/config';
 import { formatCount } from '@/lib/utils';
 import { ToastProvider } from '@/components/feedback/Toast';
+import { CikisDugmesi } from '@/features/auth/components/CikisDugmesi';
 
 /**
  * Oturum içi kabuk — MOBİL ÖNCELİKLİ.
@@ -92,24 +93,17 @@ export default async function AppLayout({ children }: { readonly children: React
               </Link>
 
               {/*
-                ÇIKIŞ — üst çubukta.
+                ÇIKIŞ — üst çubukta, ama ONAYLI.
                 Çıkış zaten vardı ama profil sayfasının EN ALTINDA, soluk bir
                 düğme olarak duruyordu; kurucu bulamadı. Bulunamayan bir çıkış
                 yolu, olmayan çıkış yoludur — ve hesabından çıkamamak, ortak
                 kullanılan bir bilgisayarda güvenlik meselesidir.
+
+                Üst çubuğa alınınca ters sorun doğdu: zilin 12 piksel yanında,
+                tek dokunuşla oturum kapatan bir düğme. Denetleme betiğim bile
+                yanlışlıkla bastı. Şimdi görünür, ama bir kez soruyor.
               */}
-              <form action={logoutAction}>
-                <button
-                  type="submit"
-                  aria-label="Oturumu kapat"
-                  title="Oturumu kapat"
-                  className="text-muted focus-visible:outline-ink flex min-h-11 min-w-11 items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2"
-                >
-                  <span aria-hidden="true" className="text-lg">
-                    ⏻
-                  </span>
-                </button>
-              </form>
+              <CikisDugmesi cikis={logoutAction} />
             </div>
           </div>
         </header>
@@ -128,7 +122,7 @@ export default async function AppLayout({ children }: { readonly children: React
           <div className="mx-auto flex w-full max-w-2xl">
             <NavLink href="/app/feed" icon="🏠" label={brand.nav.feed} />
             <NavLink href="/app/trending" icon="🔥" label={brand.nav.trending} />
-            <NavLink href="/app/challenges" icon="⚔️" label={brand.nav.challenges} />
+            <NavLink href="/app/challenges" icon="⚔️" label={brand.nav.challengesShort} />
             <NavLink href="/app/leaderboard" icon="🏆" label={brand.nav.leaderboard} />
             <NavLink href="/app/profile" icon="👤" label={brand.nav.profile} />
           </div>
