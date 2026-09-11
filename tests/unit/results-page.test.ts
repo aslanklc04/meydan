@@ -65,7 +65,17 @@ describe('kim değil kaç kişi', () => {
   it('küçük sayıda yüzde göstermez — kesir yazar', () => {
     const code = codeOnly(row);
     expect(code).toContain('minSampleForPercentage');
-    expect(flat(row)).toContain('kişiden {formatCount(hit)}&apos;i bildi');
+    expect(flat(row)).toContain('kişiden {sayiIyelik(hit, formatCount(hit))} bildi');
+  });
+
+  it('Türkçe eki SABİT YAZILMAZ', () => {
+    /*
+     * Ek sabit yazıldığı için canlıda "1 kişiden 0'i bildi" çıkıyordu;
+     * doğrusu "0'ı". Ek, sayının okunuşuna göre değişir ve bu ürünün en çok
+     * görünen cümlesi tam olarak budur.
+     */
+    expect(codeOnly(row)).toContain('sayiIyelik');
+    expect(codeOnly(row)).not.toContain('&apos;i bildi');
   });
 
   it('tahmin yokken sayı cümlesi hiç kurulmaz', () => {
@@ -77,8 +87,23 @@ describe('kim değil kaç kişi', () => {
 describe('iptal edilen etkinlik', () => {
   it('"kimse bilemedi" DEMEZ, sayılmadığını söyler', () => {
     expect(flat(row)).toContain('İptal edildi — tahminler sayılmadı');
-    // `codeOnly`: bu kuralı ANLATAN yorum, doğal olarak yasak ifadeyi içerir.
-    expect(codeOnly(row)).not.toContain('kimse bilemedi');
+  });
+
+  it('"kimse bilemedi" cümlesi İPTALE ULAŞAMAZ', () => {
+    /*
+     * Bu cümle artık var — ama yalnızca SONUÇLANMIŞ bir etkinlikte kimsenin
+     * bilemediği durumda. İptalde sonuç yoktur; orada "kimse bilemedi"
+     * demek, kimsenin hatası olmayan bir şeyi kullanıcıların başarısızlığı
+     * gibi göstermek olurdu.
+     *
+     * Koruma `showsCount` içinde: `!data.voided` şartı sağlanmadan o dal
+     * hiç çizilmiyor.
+     */
+    const code = codeOnly(row);
+    expect(code).toContain('const showsCount = !data.voided');
+    const i = code.indexOf('kimse bilemedi');
+    expect(i).toBeGreaterThan(-1);
+    expect(code.slice(0, i)).toContain('showsCount &&');
   });
 });
 
