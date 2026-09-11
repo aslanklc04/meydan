@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { funnelService, type FunnelRatio } from '@/server/modules/governance/funnel.service';
 import { formatCount } from '@/lib/utils';
+import { sayiIyelik } from '@/lib/turkce';
 
 export const metadata: Metadata = { title: 'Ölçüm', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
@@ -40,8 +41,7 @@ function Ratio({ label, hint, value }: { label: string; hint: string; value: Fun
           /* Eşik altında ORAN DEĞİL KESİR: "%50" arkasında iki kişi varken
              teknik olarak doğru, iletişim olarak sahtedir. */
           <span className="text-ink">
-            {formatCount(eligible)} kişiden {formatCount(hit)}
-            <span className="text-muted">&apos;i</span>
+            {formatCount(eligible)} kişiden {sayiIyelik(hit, formatCount(hit))}
           </span>
         ) : (
           <span className="text-ink">
