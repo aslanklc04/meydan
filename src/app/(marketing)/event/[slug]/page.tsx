@@ -10,6 +10,7 @@ import { FinancialDisclaimer } from '@/components/disclaimers/FinancialDisclaime
 import { timeRemaining } from '@/features/predictions/labels';
 import { brand } from '@/config';
 import { formatCount, formatPercent } from '@/lib/utils';
+import { sayiIyelik } from '@/lib/turkce';
 
 export const dynamic = 'force-dynamic';
 
@@ -153,7 +154,7 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
                     <span className="text-ink font-bold">
                       {count === 0
                         ? '—'
-                        : `${formatCount(consensus.total)} kişiden ${formatCount(count)}'i`}
+                        : `${formatCount(consensus.total)} kişiden ${sayiIyelik(count, formatCount(count))}`}
                     </span>
                   </div>
                 </li>
@@ -221,7 +222,8 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
             )}
             <span className="text-muted font-normal">
               Senin dışındaki {formatCount(consensus.othersTotal)} kişiden{' '}
-              {formatCount(consensus.othersWithUser)}&apos;i seninle aynı tarafta.
+              {sayiIyelik(consensus.othersWithUser, formatCount(consensus.othersWithUser))} seninle
+              aynı tarafta.
             </span>
           </p>
         )}
