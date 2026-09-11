@@ -20,11 +20,27 @@ const loginPage = read('src/app/(auth)/login/page.tsx');
 const authActions = read('src/features/auth/actions.ts');
 const appLayout = read('src/app/(app)/app/layout.tsx');
 const profile = read('src/app/(app)/app/profile/page.tsx');
+const cikisDugmesi = read('src/features/auth/components/CikisDugmesi.tsx');
 
 describe('çıkış yolu bulunabilir', () => {
   it('ÜST ÇUBUKTA bir çıkış düğmesi var', () => {
     expect(appLayout).toContain('logoutAction');
-    expect(appLayout).toContain('Oturumu kapat');
+    expect(appLayout).toContain('CikisDugmesi');
+    expect(cikisDugmesi).toContain('Oturumu kapat');
+  });
+
+  it('çıkış tek dokunuşla OLMAZ — bir kez sorar', () => {
+    /*
+     * Düğme, bildirim zilinin 12 piksel yanında ve 44x44 boyutunda duruyordu.
+     * Site gezintisi sırasında denetleme betiğim bile yanlışlıkla bastı ve
+     * oturumu kapattı; telefonda başparmakla gezen kullanıcı kesinlikle
+     * karıştırır. Yanlışlıkla çıkmanın bedeli, kullanıcının parolasını
+     * yeniden yazması — çoğu kişi orada sekmeyi kapatır.
+     */
+    expect(cikisDugmesi).toContain('Oturumu kapatalım mı?');
+    expect(cikisDugmesi).toContain('Vazgeç');
+    // Simge düğmesi FORM GÖNDERMEZ; yalnızca onayı açar.
+    expect(cikisDugmesi).toMatch(/type="button"[\s\S]*?onClick=\{\(\) => setSoruyor\(true\)\}/);
   });
 
   it('profil sayfasında AYRI BAŞLIKLI bir Hesap bölümü var', () => {
@@ -35,7 +51,9 @@ describe('çıkış yolu bulunabilir', () => {
 
   it('çıkış SUNUCU eylemiyle yapılır — istemcide temizlenen bir bayrak değil', () => {
     expect(profile).toContain('<form action={logoutAction}>');
-    expect(appLayout).toContain('<form action={logoutAction}>');
+    // Üst çubukta eylem CikisDugmesi'ne geçirilir ve orada form ile gönderilir.
+    expect(appLayout).toContain('<CikisDugmesi cikis={logoutAction} />');
+    expect(cikisDugmesi).toContain('<form action={cikis}');
   });
 });
 
