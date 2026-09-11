@@ -14,10 +14,19 @@ export function ErrorScreen({
   reset,
   title = 'Bir sorun oluştu.',
   hint = 'Bağlantında ya da bizde geçici bir aksaklık olabilir. Tekrar denemek genelde yeterli oluyor.',
+  backHref = '/app/feed',
+  backLabel = 'Akışa dön',
 }: {
   readonly reset?: () => void;
   readonly title?: string;
   readonly hint?: string;
+  /*
+   * ÇIKIŞ YOLU SAYFAYA GÖRE DEĞİŞİR. Bu ekran "Akışa dön" diyordu; giriş
+   * yapmamış bir ziyaretçiyi giriş ekranına atan bir düğmedir bu ve hata
+   * anında en son ihtiyacı olan şeydir. Public tarafta ana sayfaya döner.
+   */
+  readonly backHref?: string;
+  readonly backLabel?: string;
 }) {
   return (
     <main className="mx-auto w-full max-w-md px-4 py-12 text-center">
@@ -38,10 +47,10 @@ export function ErrorScreen({
           </button>
         )}
         <Link
-          href="/app/feed"
+          href={backHref}
           className="border-border text-ink flex min-h-12 w-full items-center justify-center rounded-lg border text-base font-semibold"
         >
-          Akışa dön
+          {backLabel}
         </Link>
       </div>
     </main>
