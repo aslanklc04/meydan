@@ -67,6 +67,12 @@ export const brand = {
     feed: 'Akış',
     trending: 'Gündem',
     challenges: 'Meydan Okumalar',
+    /*
+     * ALT GEZİNMEDE KISA HÂLİ. 420 piksel genişlikte "Meydan Okumalar" iki
+     * satıra kırılıyor ve o sekme diğer dördünden farklı görünüyordu; göz
+     * bunu "bozuk" diye okur. Sayfa başlığı uzun hâliyle kalır.
+     */
+    challengesShort: 'Meydanlar',
     leaderboard: 'Liderlik',
     profile: 'Profil',
   },
