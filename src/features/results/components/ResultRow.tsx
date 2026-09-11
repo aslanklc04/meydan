@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { TakimArmasi } from '@/components/media/TakimArmasi';
 import { formatCount } from '@/lib/utils';
+import { sayiIyelik } from '@/lib/turkce';
 import { socialProof } from '@/config/social-proof';
 import { timeAgo } from '@/features/predictions/labels';
 
@@ -45,22 +47,15 @@ export function ResultRow({ data }: { readonly data: ResultRowData }) {
         href={`/event/${data.slug}`}
         className="border-border hover:border-brand focus-visible:outline-ink flex items-center gap-3 rounded-xl border px-4 py-3 focus-visible:outline-2 focus-visible:outline-offset-2"
       >
-        {data.winnerImageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+        {/* Arma yüklenemezse bileşen kendini siler; simge her zaman durur. */}
+        <span aria-hidden="true" className="w-8 shrink-0 text-center text-xl">
+          <TakimArmasi
             src={data.winnerImageUrl}
-            alt=""
-            aria-hidden="true"
-            width={32}
-            height={32}
-            loading="lazy"
-            className="bg-background h-8 w-8 shrink-0 rounded-full object-contain"
+            boyut={32}
+            className="bg-background h-8 w-8 rounded-full object-contain"
           />
-        ) : (
-          <span aria-hidden="true" className="w-8 shrink-0 text-center text-xl">
-            {data.voided ? '➖' : '🏁'}
-          </span>
-        )}
+          {!data.winnerImageUrl && (data.voided ? '➖' : '🏁')}
+        </span>
 
         <div className="min-w-0 flex-1">
           <p className="text-ink truncate text-sm font-semibold">{data.title}</p>
@@ -88,11 +83,19 @@ export function ResultRow({ data }: { readonly data: ResultRowData }) {
             {showsCount && (
               <>
                 <span aria-hidden="true"> · </span>
-                {total >= socialProof.minSampleForPercentage ? (
+                {hit === 0 ? (
+                  /*
+                   * "1 kişiden 0'ı bildi" dilbilgisel olarak doğru ama
+                   * kulağa saçma geliyor. Kimsenin bilemediği bir sonuç
+                   * zaten anlatılmaya değer bir şey; öyle anlatılır.
+                   * (İPTAL burada değil: iptalde sonuç yok, sayılmadı.)
+                   */
+                  <>kimse bilemedi</>
+                ) : total >= socialProof.minSampleForPercentage ? (
                   <>%{Math.round((hit / total) * 100)} bildi</>
                 ) : (
                   <>
-                    {formatCount(total)} kişiden {formatCount(hit)}&apos;i bildi
+                    {formatCount(total)} kişiden {sayiIyelik(hit, formatCount(hit))} bildi
                   </>
                 )}
               </>
