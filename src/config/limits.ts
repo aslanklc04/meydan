@@ -59,6 +59,12 @@ export const rateLimits = {
    * üretimini engelleyecek kadar dar.
    */
   'gazette.create': { limit: scaled(10), windowSec: DAY, by: 'user' },
+  /*
+   * Şikâyet sınırı DAR TUTULMAZ ama sınırsız da değildir: bildirim bir
+   * silah olarak da kullanılabilir (birini toplu bildirimle boğmak). Günde
+   * 30, dürüst kullanımın çok üstünde.
+   */
+  'report.create': { limit: scaled(30), windowSec: DAY, by: 'user' },
   'reaction.toggle': { limit: scaled(200), windowSec: HOUR, by: 'user' },
   'follow.toggle': { limit: scaled(100), windowSec: DAY, by: 'user' },
 
@@ -88,7 +94,12 @@ export const pagination = {
 export const contentLimits = {
   bioMaxLength: 280,
   explanationMaxLength: 500,
-  commentMaxLength: 1000,
+  /*
+   * SOHBET YORUMU 500. Faz 1'den kalma 1000 değeri hiç kullanılmamıştı.
+   * Maç sohbeti telefonda okunuyor: bin karakterlik bir yorum, ekranı tek
+   * başına kaplar ve tartışmayı öldürür. Sınır veritabanında da aynıdır.
+   */
+  commentMaxLength: 500,
   usernameMinLength: 3,
   usernameMaxLength: 20,
 } as const;
