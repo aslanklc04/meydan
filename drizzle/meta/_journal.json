@@ -134,6 +134,13 @@
       "when": 1789329805967,
       "tag": "0018_opponent_picks_side",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1789416205967,
+      "tag": "0019_event_comment",
+      "breakpoints": true
     }
   ]
 }
