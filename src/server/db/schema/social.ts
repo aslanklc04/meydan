@@ -55,6 +55,8 @@ export const notificationType = pgEnum('notification_type', [
   'FOLLOWED_USER_PREDICTION',
   'BADGE_EARNED',
   'SEASON_RESULT',
+  /* Meydan Sohbeti: yorumuna cevap gelen kişi haberdar olmalı. */
+  'COMMENT_REPLY',
 ]);
 
 export const notifications = pgTable(
