@@ -66,6 +66,23 @@ const serverSchema = z.object({
   ADMIN_EMAIL: z.string().optional(),
 
   SENTRY_DSN: z.string().optional(),
+
+  /**
+   * Google Search Console doğrulama kodu.
+   *
+   * ── NEDEN ENV, NEDEN KODA GÖMÜLMÜYOR ─────────────────────────────────────
+   * Site arama sonuçlarında görünmüyordu ve sebebi teknik bir hata değildi:
+   * Google'a varlığından HABER VERİLMEMİŞTİ. Haber vermenin yolu Search
+   * Console'da alan adını doğrulamak; alt alan adlarında bunun en kolay yolu
+   * ana sayfaya bir doğrulama etiketi koymak.
+   *
+   * Kod bir sır değildir (sayfa kaynağında herkes görür) ama değeri koda
+   * gömmek, her doğrulama yenilemesinde yeni bir sürüm gerektirirdi.
+   *
+   * Yoksa etiket HİÇ basılmaz: boş bir `content` ile etiket koymak,
+   * doğrulamayı sessizce başarısız kılar.
+   */
+  GOOGLE_SITE_VERIFICATION: z.string().optional(),
 });
 
 /** Kaba e-posta biçim denetimi — dayatma değil, uyarı üretmek için. */
