@@ -10,6 +10,7 @@ import { jobsService } from '@/server/modules/governance/jobs.service';
 import { rankingService } from '@/server/modules/ranking/service';
 import { auditService } from '@/server/modules/governance/audit.service';
 import { gazetteService } from '@/server/modules/gazette/service';
+import { commentService } from '@/server/modules/comment/service';
 import { log, logEvents } from '@/server/observability/logger';
 import type { FlowResult } from '@/features/events/actions';
 
@@ -299,6 +300,31 @@ export async function hideGazetteAction(publicToken: string): Promise<FlowResult
     return { ok: true, message: 'Kapak gizlendi; bağlantısı da artık açılmıyor.' };
   } catch (error) {
     return adminError(error, 'kapak gizleme');
+  }
+}
+
+/**
+ * Sohbet yorumunu gizler.
+ *
+ * "İşleme al" bildirimi kapatır ama içeriği YERİNDE BIRAKIR. Şikâyet edilen
+ * yorumun gerçekten kaldırılması için ayrı bir düğme gerekir; yoksa kuyruk
+ * temizlenir ve yorum sitede kalmaya devam eder. Gazete kapağında verilen
+ * kararın aynısı.
+ */
+export async function hideCommentAction(commentId: string): Promise<FlowResult> {
+  if (!commentId) return { ok: false, message: 'Yorum seçilmedi.' };
+  try {
+    const actor = await requireRole('ADMIN');
+    await commentService.hide(commentId, actor.id);
+    await auditService.record({
+      actorId: actor.id,
+      action: 'COMMENT_HIDDEN',
+      targetType: 'comment',
+      targetId: commentId,
+    });
+    return { ok: true, message: 'Yorum gizlendi.' };
+  } catch (error) {
+    return adminError(error, 'yorum gizleme');
   }
 }
 
