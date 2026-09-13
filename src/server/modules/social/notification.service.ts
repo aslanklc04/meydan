@@ -28,7 +28,8 @@ export type NotificationType =
   | 'NEW_FOLLOWER'
   | 'FOLLOWED_USER_PREDICTION'
   | 'BADGE_EARNED'
-  | 'SEASON_RESULT';
+  | 'SEASON_RESULT'
+  | 'COMMENT_REPLY';
 
 export type CreateNotificationInput = {
   readonly userId: string;
