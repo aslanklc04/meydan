@@ -141,6 +141,20 @@
       "when": 1789416205967,
       "tag": "0019_event_comment",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789502605967,
+      "tag": "0020_prediction_immutable",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789589005967,
+      "tag": "0021_detective",
+      "breakpoints": true
     }
   ]
 }
