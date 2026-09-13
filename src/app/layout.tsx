@@ -35,6 +35,20 @@ export const metadata: Metadata = {
     title: `${brand.appName} — ${brand.tagline}`,
     description: brand.description,
   },
+  /*
+   * GOOGLE DOĞRULAMASI — yalnızca değer VARSA.
+   *
+   * Site hiçbir aramada görünmüyordu; sebebi teknik bir kusur değil,
+   * Google'ın siteden habersiz olmasıydı. Search Console'da alan adını
+   * doğrulamak bunun ilk adımı ve alt alan adlarında en kolay yolu bu etiket.
+   *
+   * Değer yoksa etiket hiç basılmaz: boş `content` taşıyan bir doğrulama
+   * etiketi, doğrulamayı sessizce başarısız kılar ve neden olmadığı
+   * anlaşılmaz.
+   */
+  ...(serverEnv.GOOGLE_SITE_VERIFICATION
+    ? { verification: { google: serverEnv.GOOGLE_SITE_VERIFICATION } }
+    : {}),
 };
 
 export default function RootLayout({ children }: { readonly children: React.ReactNode }) {
