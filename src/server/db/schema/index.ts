@@ -5,7 +5,7 @@
  * Faz 3: catalog · prediction · challenge · economy · reputation
  * Faz 4: social (takip, bildirim, akış, moderasyon) · ranking (sezon, liderlik, rozet)
  * Faz 5: governance (ilgi alanları, denetim kaydı)
- * Faz 8: gazette (Gelecek Gazetesi) · share (tek soruluk meydan okuma)
+ * Faz 8: gazette (Gelecek Gazetesi) · share (tek soruluk meydan okuma) · comment (Meydan Sohbeti)
  */
 export * from './identity';
 export * from './catalog';
@@ -18,3 +18,4 @@ export * from './ranking';
 export * from './governance';
 export * from './gazette';
 export * from './share';
+export * from './comment';
