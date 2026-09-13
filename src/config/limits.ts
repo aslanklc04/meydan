@@ -53,6 +53,12 @@ export const rateLimits = {
   'challenge.create': { limit: scaled(20), windowSec: HOUR, by: 'user' },
   'comment.create': { limit: scaled(20), windowSec: HOUR, by: 'user' },
   /*
+   * Vaka cevabı: her vakaya zaten BİR kez cevap verilebiliyor, yani asıl
+   * koruma veritabanında. Bu sınır, art arda vaka açıp otomatik cevaplayan
+   * bir betiği yavaşlatmak için.
+   */
+  'detective.answer': { limit: scaled(60), windowSec: HOUR, by: 'user' },
+  /*
    * Gazete kurmak sıradan bir yazma değildir: her kapak KALICI ve HERKESE
    * AÇIK bir adres üretir. Günde 10, gerçek kullanımın çok üstünde (bir
    * kişinin günde on ayrı iddia kapağı kurması beklenmez) ama otomatik adres
