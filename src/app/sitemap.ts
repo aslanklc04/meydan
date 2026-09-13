@@ -24,6 +24,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Sonuç listesi her gün değişir ve ürünün dışarıdan doğrulanabilir tek
     // kanıtıdır: arama motoruna da öyle tanıtılır.
     { url: `${base}/sonuclar`, changeFrequency: 'daily', priority: 0.7 },
+    // Kısa Dedektif vakaları kalıcı içerik: ürünün kayıt istemeden
+    // okunabilen ilk bölümü ve arama motoru için gerçek bir sayfa.
+    { url: `${base}/dedektif`, changeFrequency: 'weekly', priority: 0.7 },
     { url: `${base}/tahmin-gucu`, changeFrequency: 'monthly', priority: 0.5 },
     // Yasal sayfalar da kalıcı ve herkese açık içeriktir; kayıt olmadan
     // okunabilmeleri gerekir.
