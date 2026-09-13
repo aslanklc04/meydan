@@ -29,7 +29,9 @@ export type AuditAction =
   | 'CHALLENGE_REFUNDED'
   | 'RATINGS_RECOMPUTED'
   /** Şikâyet üzerine bir gazete kapağı gizlendi (Faz 8). */
-  | 'GAZETTE_HIDDEN';
+  | 'GAZETTE_HIDDEN'
+  /** Meydan Sohbetindeki bir yorum moderasyonla gizlendi (Faz 8). */
+  | 'COMMENT_HIDDEN';
 
 export type AuditInput = {
   readonly actorId: string | null;
@@ -112,4 +114,5 @@ export const auditActionLabel: Record<AuditAction, string> = {
   CHALLENGE_REFUNDED: 'Meydan Okuma iade edildi',
   RATINGS_RECOMPUTED: 'İtibar yeniden hesaplandı',
   GAZETTE_HIDDEN: 'Gazete kapağı gizlendi',
+  COMMENT_HIDDEN: 'Sohbet yorumu gizlendi',
 };
