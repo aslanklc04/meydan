@@ -62,6 +62,8 @@ export type JobReport = {
   readonly importedFixtures: number;
   /** Skoru gelip kendiliğinden sonuçlanan maç. */
   readonly resolvedFixtures: number;
+  /** Yeniden üretilen liderlik listesi sayısı. */
+  readonly leaderboards: number;
 };
 
 export const jobsService = {
@@ -166,6 +168,32 @@ export const jobsService = {
 
     await rankingService.generateTrending();
 
+    /*
+     * ── LİDERLİK LİSTELERİ BURADA ÜRETİLİR ───────────────────────────────
+     *
+     * Liderlik ekranı Faz 4'ten beri vardı ve DÖNEMLERİ de vardı (haftalık,
+     * aylık, sezon, tüm zamanlar) — ama listeyi üreten iş YALNIZCA yönetim
+     * panelindeki bir düğmeye bağlıydı. Yani kurucu her hafta o düğmeye
+     * basmadıkça "Haftalık" listesi hiç değişmiyordu: ekran çalışıyor
+     * görünüyor, içindeki veri donuyordu.
+     *
+     * Bu, projede defalarca gördüğümüz kalıbın aynısı: yazılmış ama
+     * çalışmayan özellik, yazılmamış özelliktir. Sonuçlar otomatik geliyorsa
+     * sıralama da otomatik gelmeli.
+     *
+     * Hata YUTULUR: bir dönemin üretilememesi, iade ve kapanış gibi kritik
+     * işlerin sonucunu geçersiz kılmamalı.
+     */
+    let leaderboards = 0;
+    for (const period of ['WEEKLY', 'MONTHLY', 'SEASON', 'ALL_TIME'] as const) {
+      try {
+        await rankingService.generateLeaderboard({ period, now });
+        leaderboards += 1;
+      } catch (error) {
+        log.error(logEvents.jobFailed, { job: 'leaderboard', period, error });
+      }
+    }
+
     // Süresi dolmuş oran sınırlama sayaçları temizlenir; tablo aksi hâlde
     // süresiz büyür ve geçmiş sayaçlar hiçbir işe yaramaz.
     const prunedCounters = await pruneRateLimitCounters(now);
@@ -209,6 +237,7 @@ export const jobsService = {
       featuredSelected,
       importedFixtures,
       resolvedFixtures,
+      leaderboards,
     };
   },
 
