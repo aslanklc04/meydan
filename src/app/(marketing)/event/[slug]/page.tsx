@@ -6,6 +6,8 @@ import { catalogService } from '@/server/modules/catalog/service';
 import { consensusService } from '@/server/modules/catalog/consensus.service';
 import { profileService } from '@/server/modules/social/profile.service';
 import { EventCard } from '@/features/events/components/EventCard';
+import { Sohbet } from '@/features/comments/components/Sohbet';
+import { commentService } from '@/server/modules/comment/service';
 import { FinancialDisclaimer } from '@/components/disclaimers/FinancialDisclaimer';
 import { timeRemaining } from '@/features/predictions/labels';
 import { brand } from '@/config';
@@ -60,6 +62,13 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
   const consensus = await consensusService.view(event.id, event.myOutcomeId);
 
   const topPredictors = await profileService.topPredictorsForEvent(event.id);
+
+  /*
+   * ── MEYDAN SOHBETİ ───────────────────────────────────────────────────────
+   * Kilit SUNUCUDA: tahmin yapmamış ziyaretçiye yorumların metni hiç
+   * gönderilmez, sayfa kaynağına da düşmez. Arayüzde gizlemek yetmezdi.
+   */
+  const sohbet = await commentService.view(event.id, actor?.id ?? null);
   const myOutcomeLabel = event.outcomes.find((o) => o.id === event.myOutcomeId)?.label ?? null;
 
   return (
@@ -80,8 +89,14 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
               ? `Kapanışa ${timeRemaining(event.closesAt)}`
               : 'Tahminler kapandı, sonuç bekleniyor.'}
         {' · '}
-        {formatCount(event.predictionCount)} tahmin · {formatCount(event.challengeCount)}{' '}
-        {brand.challengeNoun}
+        {formatCount(event.predictionCount)} tahmin
+        {/* Sıfır sayı yazılmaz: "0 Meydan Okuma" yalnızca eksikliği duyurur. */}
+        {event.challengeCount > 0 && (
+          <>
+            {' · '}
+            {formatCount(event.challengeCount)} {brand.challengeNoun}
+          </>
+        )}
       </p>
 
       {event.isFinancial && (
@@ -229,8 +244,13 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
         )}
       </section>
 
-      {/* ── Tahmin kartı / davet ── */}
-      <section className="mt-6">
+      {/*
+        ── TAHMİN KARTI / DAVET ──────────────────────────────────────────────
+        `id="tahmin"`: kilitli sohbetteki "Tahminimi yap" düğmesi buraya
+        götürür. Düğme önce sayfanın kendisine bağlanıyordu — yani kullanıcı
+        zaten üstünde olduğu sayfaya gönderiliyor ve hiçbir şey olmuyordu.
+      */}
+      <section id="tahmin" className="mt-6 scroll-mt-20">
         {event.isOpen ? (
           actor ? (
             <EventCard
@@ -252,6 +272,7 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
                 })),
                 myOutcomeId: event.myOutcomeId,
                 myOutcomeLabel,
+                commentCount: sohbet.total,
               }}
             />
           ) : (
@@ -295,6 +316,15 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
           </ul>
         </section>
       )}
+
+      {/* Sohbet EN ALTTA: sayfanın işi önce tahmini almak. Sohbeti tepeye
+          koymak, henüz tahmin yapmamış kişiye önce kalabalığı gösterirdi. */}
+      <Sohbet
+        eventId={event.id}
+        eventSlug={event.slug}
+        view={sohbet}
+        canWrite={event.isOpen && event.myOutcomeId !== null}
+      />
     </main>
   );
 }
