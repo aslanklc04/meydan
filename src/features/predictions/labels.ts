@@ -90,6 +90,7 @@ export const notificationIcon: Record<string, string> = {
   FOLLOWED_USER_PREDICTION: '👥',
   BADGE_EARNED: '🏆',
   SEASON_RESULT: '📅',
+  COMMENT_REPLY: '💬',
 };
 
 /**
