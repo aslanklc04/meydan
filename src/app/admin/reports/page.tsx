@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { adminService } from '@/server/modules/governance/admin.service';
 import { DataTable } from '@/features/admin/components/DataTable';
 import { ActionButton } from '@/features/admin/components/ActionButton';
-import { hideGazetteAction, reviewReportAction } from '@/features/admin/actions';
+import { hideCommentAction, hideGazetteAction, reviewReportAction } from '@/features/admin/actions';
 
 export const metadata: Metadata = { title: 'Bildirimler', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
@@ -38,6 +38,8 @@ export default async function AdminReportsPage() {
             >
               Gazete kapağı
             </a>
+          ) : r.targetType === 'COMMENT' ? (
+            'Sohbet yorumu'
           ) : (
             r.targetType
           ),
@@ -56,6 +58,13 @@ export default async function AdminReportsPage() {
                 label="Kapağı gizle"
                 tone="danger"
                 action={hideGazetteAction.bind(null, r.targetId)}
+              />
+            )}
+            {r.targetType === 'COMMENT' && (
+              <ActionButton
+                label="Yorumu gizle"
+                tone="danger"
+                action={hideCommentAction.bind(null, r.targetId)}
               />
             )}
             <ActionButton
