@@ -60,6 +60,12 @@ export default async function MarketingLayout({
             */}
             <div className="flex items-center gap-3">
               <Link
+                href="/dedektif"
+                className="text-ink focus-visible:outline-ink flex min-h-11 items-center text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                Dedektif
+              </Link>
+              <Link
                 href="/sonuclar"
                 className="text-ink focus-visible:outline-ink flex min-h-11 items-center text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
               >
