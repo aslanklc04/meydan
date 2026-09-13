@@ -42,6 +42,8 @@ export type EventCardData = {
   readonly outcomes: readonly { id: string; label: string; imageUrl?: string | null }[];
   readonly myOutcomeId: string | null;
   readonly myOutcomeLabel: string | null;
+  /** Meydan Sohbetindeki yorum sayısı — kilitliyken de gösterilir. */
+  readonly commentCount: number;
 };
 
 /** ADR-18 ile aynı kural: sıralı sonuçlarda, seçilmeyen İLK sonuç karşı taraftır. */
@@ -346,21 +348,45 @@ export function EventCard({
         </p>
       )}
 
-      <p className="text-muted mt-3 text-xs">
-        {/*
-          SIFIR SAYI YAZILMAZ. "3 tahmin · 0 Meydan Okuma" satırının ikinci
-          yarısı hiçbir şey öğretmez; yalnızca eksikliği duyurur. Ürün zaten
-          boşluğu doldurma görüntüsünden kaçınıyor — boşluğu ilan etmekten de
-          kaçınmalı.
-        */}
-        {event.predictionCount} tahmin
-        {event.challengeCount > 0 && (
-          <>
-            <span aria-hidden="true"> · </span>
-            {event.challengeCount} {brand.challengeNoun}
-          </>
-        )}
-      </p>
+      {/*
+        ── SOHBET DÜĞMESİ AKIŞ KARTINDA ─────────────────────────────────────
+        Kullanıcı maç sayfasında değil, AKIŞTA yaşıyor. Sohbeti yalnızca maç
+        sayfasına koymak, onu ulaşılamaz kılardı — bu projede aynı hatayı
+        (paylaş düğmesi, takım armaları, sonuç listesi) üç kez yaptım.
+
+        Sayı kilitliyken de yazılır: "8 yorum" bir sebeptir, boş bir düğme
+        değildir. Kimin ne dediğini söylemediği için sızıntı da değil.
+      */}
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <p className="text-muted text-xs">
+          {/*
+            SIFIR SAYI YAZILMAZ. "3 tahmin · 0 Meydan Okuma" satırının ikinci
+            yarısı hiçbir şey öğretmez; yalnızca eksikliği duyurur. Ürün zaten
+            boşluğu doldurma görüntüsünden kaçınıyor — boşluğu ilan etmekten de
+            kaçınmalı.
+          */}
+          {event.predictionCount} tahmin
+          {event.challengeCount > 0 && (
+            <>
+              <span aria-hidden="true"> · </span>
+              {event.challengeCount} {brand.challengeNoun}
+            </>
+          )}
+        </p>
+
+        <Link
+          href={`/event/${event.slug}#sohbet`}
+          className="text-muted hover:text-brand focus-visible:outline-ink flex min-h-11 shrink-0 items-center text-xs font-semibold focus-visible:outline-2"
+        >
+          <span aria-hidden="true">💬 </span>
+          {event.commentCount > 0 ? `Sohbet · ${event.commentCount}` : 'Sohbet'}
+          {event.myOutcomeId === null && (
+            <span aria-hidden="true" className="ml-1">
+              🔒
+            </span>
+          )}
+        </Link>
+      </div>
     </article>
   );
 }
