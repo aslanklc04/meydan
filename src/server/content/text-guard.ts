@@ -173,15 +173,35 @@ export function checkPublicText(input: string): TextVerdict {
 }
 
 /** Kullanıcıya gösterilecek mesaj — hangi kelimenin yakalandığını SÖYLEMEZ. */
-export function verdictMessage(reason: Exclude<TextVerdict, { ok: true }>['reason']): string {
+/**
+ * ── MESAJ, METNİN TÜRÜNE GÖRE DEĞİŞİR ──────────────────────────────────────
+ * Süzgeç önce yalnızca gazete başlıkları için yazılmıştı ve bütün mesajlar
+ * "Başlığa…" diye başlıyordu. Sohbet aynı süzgeci kullanınca kullanıcı, bir
+ * yorum yazarken "Başlığa bağlantı koyulamıyor." cevabını aldı — canlıda
+ * değil, denemede yakalandı. Hangi alandan bahsedildiğini anlamayan bir hata
+ * mesajı, hata mesajı değildir.
+ *
+ * `tur` verilmezse eski davranış korunur; çağıranların hepsini değiştirmek
+ * gerekmez.
+ */
+export function verdictMessage(
+  reason: Exclude<TextVerdict, { ok: true }>['reason'],
+  tur: 'baslik' | 'yorum' = 'baslik',
+): string {
+  const ad = tur === 'yorum' ? 'Yoruma' : 'Başlığa';
+  const o = tur === 'yorum' ? 'Bu yorum' : 'Bu başlık';
+  const secimi = tur === 'yorum' ? 'Başka türlü yaz.' : 'Başka bir başlık seç.';
+
   switch (reason) {
     case 'LINK':
-      return 'Başlığa bağlantı koyulamıyor.';
+      return `${ad} bağlantı koyulamıyor.`;
     case 'IMPERSONATION':
-      return 'Bu başlık MEYDAN adına yazılmış gibi görünüyor. Başka bir başlık seç.';
+      return `${o} MEYDAN adına yazılmış gibi görünüyor. ${secimi}`;
     case 'GIBBERISH':
-      return 'Başlık anlaşılır bir metin olmalı.';
+      return tur === 'yorum' ? 'Anlaşılır bir şeyler yaz.' : 'Başlık anlaşılır bir metin olmalı.';
     case 'PROFANITY':
-      return 'Bu başlık herkese açık bir sayfada görünecek. Kaba ifade içermeyen bir başlık seç.';
+      return tur === 'yorum'
+        ? 'Sohbet herkese açık. Kaba ifade olmadan yazabilir misin?'
+        : 'Bu başlık herkese açık bir sayfada görünecek. Kaba ifade içermeyen bir başlık seç.';
   }
 }
