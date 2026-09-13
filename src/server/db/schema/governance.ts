@@ -58,6 +58,8 @@ export const auditAction = pgEnum('audit_action', [
   /** İtibarın toplu yeniden hesaplanması (algoritma sürüm geçişi). */
   'RATINGS_RECOMPUTED',
   'GAZETTE_HIDDEN',
+  /** Meydan Sohbetindeki bir yorumun moderasyonla gizlenmesi. */
+  'COMMENT_HIDDEN',
 ]);
 
 /**
