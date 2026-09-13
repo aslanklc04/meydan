@@ -10,6 +10,7 @@ import { socialService } from '@/server/modules/social/service';
 import { onboardingService } from '@/server/modules/identity/onboarding.service';
 import { gazetteService } from '@/server/modules/gazette/service';
 import { predictionService } from '@/server/modules/prediction/service';
+import { commentService } from '@/server/modules/comment/service';
 import { ResultCard } from '@/features/share/components/ResultCard';
 import { ResultRow } from '@/features/results/components/ResultRow';
 import { EventCard } from '@/features/events/components/EventCard';
@@ -106,6 +107,16 @@ export default async function FeedPage({
 
   const isNewUser = rating.completed === 0;
   const gazetteReady = gazetteEligible.length;
+
+  /*
+   * SOHBET SAYILARI TEK SORGUDA. Kart başına ayrı sorgu açmak, yirmi kartlı
+   * bir akışta yirmi sorgu demekti.
+   */
+  const commentCounts = await bolum(
+    'sohbet_sayilari',
+    () => commentService.countsFor(events.map((e) => e.id)),
+    new Map<string, number>(),
+  );
 
   /*
    * AYNI MAÇ İKİ KEZ GÖSTERİLMEZ.
@@ -302,6 +313,7 @@ export default async function FeedPage({
                     label: o.label,
                     imageUrl: o.imageUrl,
                   })),
+                  commentCount: commentCounts.get(event.id) ?? 0,
                   myOutcomeId: event.myOutcomeId,
                   myOutcomeLabel:
                     event.outcomes.find((o) => o.id === event.myOutcomeId)?.label ?? null,
